@@ -1,0 +1,29 @@
+# Ignore everything
+*
+
+# Allow only .cpp files
+!*.cpp
+!.gitignore
+
+# Ignore .cpp files in specific directories (e.g., build output or intermediate files)
+!/**/
+
+# Ignore common Visual Studio build and temporary files
+.vs/
+*.exe
+*.obj
+*.log
+*.dll
+*.pdb
+*.lib
+*.idb
+*.ipch
+*.opendb
+*.VC.db
+*.VC.opendb
+.DS_Store
+*.user
+*.suo
+*.ilk
+vcpkg_installed/
+x64/
