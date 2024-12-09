@@ -2,8 +2,8 @@
 #include <crow.h>
 #include <sqlite3.h>
 #include <jwt-cpp/jwt.h>
-using namespace std;
 
+using namespace std;
 const string secretToken = "e6a76430104f92883b23e707051da61c56172e9276d7b90378b0942d022d4646";
 
 int executeSQL(sqlite3* db, const char* sql) {
@@ -144,6 +144,20 @@ int main(void){
     }
 
     crow::SimpleApp studentSync;
+    crow::mustache::set_global_base(".");
+    // serve home page (React) frontend/build
+    CROW_ROUTE(studentSync, "/")
+    ([]() {
+        auto page = crow::mustache::load("frontend/build/index.html");
+        return page.render();
+    });
+
+    // static files
+    /*CROW_ROUTE(studentSync, "/static/<path>")
+    ([](const crow::request& req, crow::response& res, string path) {
+        crow::response resp;
+        resp.set_static_file_info("frontend/build/static/" + path);
+    });*/
 
     CROW_ROUTE(studentSync, "/api/register/")
     .methods("POST"_method)
