@@ -116,6 +116,29 @@ bool decodeToken(string token, string& username, bool& isAdmin) {
     }
 }
 
+struct CORS {
+    struct context {};
+
+    void before_handle(crow::request& req, crow::response& res, context&) {
+        // Handle Preflight Requests (OPTIONS method)
+        if (req.method == crow::HTTPMethod::OPTIONS) {
+            res.add_header("Access-Control-Allow-Origin", "http://localhost:3000"); // Allowed origin
+            res.add_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+            res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            res.code = 204; // No Content
+            res.end();
+        }
+    }
+
+    void after_handle(crow::request&, crow::response& res, context&) {
+        // Add CORS headers to all responses
+        res.add_header("Access-Control-Allow-Origin", "http://localhost:3000");
+        res.add_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    }
+};
+
+
 int main(void){
     sqlite3* db;
     int exit = sqlite3_open("MainDatabase.db", &db);
@@ -143,7 +166,7 @@ int main(void){
         return -1;
     }
 
-    crow::SimpleApp studentSync;
+    crow::App<CORS> studentSync;
     crow::mustache::set_global_base(".");
     // serve home page (React) frontend/build
     CROW_ROUTE(studentSync, "/")

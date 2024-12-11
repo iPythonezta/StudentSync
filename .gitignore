@@ -30,6 +30,8 @@ vcpkg_installed/
 x64/
 
 
+!static/
+!static/**/*
 !frontend/
 !frontend/**/*
 frontend/node_modules/
