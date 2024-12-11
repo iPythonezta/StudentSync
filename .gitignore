@@ -5,6 +5,7 @@
 !*.cpp
 !.gitignore
 !*.db
+
 # Ignore .cpp files in specific directories (e.g., build output or intermediate files)
 !/**/
 
@@ -27,3 +28,8 @@
 *.ilk
 vcpkg_installed/
 x64/
+
+
+!frontend/
+!frontend/**/*
+frontend/node_modules/
