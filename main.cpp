@@ -2,7 +2,8 @@
 #include <crow.h>
 #include <sqlite3.h>
 #include <jwt-cpp/jwt.h>
-
+#include <vector>
+#include <regex>
 using namespace std;
 const string secretToken = "e6a76430104f92883b23e707051da61c56172e9276d7b90378b0942d022d4646";
 
@@ -11,7 +12,7 @@ int executeSQL(sqlite3* db, const char* sql) {
     int exit = sqlite3_exec(db, sql, nullptr, 0, &errorMessage);
 
     if (exit != SQLITE_OK) {
-        cerr << "Error executing SQL: " << errorMessage << endl;
+        cout << "Error executing SQL: " << errorMessage << endl;
         sqlite3_free(errorMessage);
         return 1;
     }
@@ -116,6 +117,50 @@ bool decodeToken(string token, string& username, bool& isAdmin) {
     }
 }
 
+bool matchesIso8601(const string& date) {
+    return regex_match(date, regex(R"(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d)"));
+}
+
+void createEvent(sqlite3* db, string title, string description, string schedule_at) {
+    string sql = "INSERT INTO events (title, description, schedule_at) VALUES ('" + title + "', '" + description + "', '" + schedule_at + "');";
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        throw(exception(sqlite3_errmsg(db)));
+    }
+    sqlite3_finalize(stmt);
+
+}
+
+void deleteEvent(sqlite3* db, int id) {
+    string sql = "DELETE FROM events WHERE id = " + to_string(id) + ";";
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        throw(exception("Error deleting event"));
+    }
+}
+
+// functon for fetching all tasks
+vector<vector<string>> getAllEvents(sqlite3* db){
+    vector<vector<string>> events;
+    string sqlQuery = "SELECT id, title, description, schedule_at FROM events;";
+    sqlite3_stmt* stmt;
+    vector<string> tempEvent;
+    sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        tempEvent.clear();
+        cout << "Fetching data" << endl;
+        tempEvent.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+        tempEvent.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+        tempEvent.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+        tempEvent.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3))));
+        events.push_back(tempEvent);
+    }
+    return events;
+    
+}
+
 struct CORS {
     struct context {};
 
@@ -160,11 +205,21 @@ int main(void){
         );
     )";
 
-    defaultAdminUser(db);
+    const char* create_events = R"(
+        CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            schedule_at TEXT NOT NULL
+        )
+    )";
 
-    if (executeSQL(db, create_user)) {
+
+    if (executeSQL(db, create_user) && executeSQL(db, create_events)) {
         return -1;
     }
+
+    defaultAdminUser(db);
 
     crow::App<CORS> studentSync;
     crow::mustache::set_global_base(".");
@@ -212,6 +267,7 @@ int main(void){
         if (!json_data) {
             return crow::response(400, "Invalid JSON");
         }
+        
         try{
             name = json_data["name"].s();
             email = json_data["email"].s();
@@ -261,6 +317,70 @@ int main(void){
             return crow::response(401, "Invalid credentials");
         }
 
+    });
+
+    CROW_ROUTE(studentSync, "/api/events/")
+    .methods("GET"_method, "POST"_method)
+    ([db](const crow::request& request){
+        string adminUsername, name, datetime, description;
+        bool adminIsAdmin;
+        if (request.method == "POST"_method) {
+            string auth_header = string(request.get_header_value("Authorization")).replace(0,7,"");
+            if (auth_header.empty()) {
+                return crow::response(401, "Authorization token is missing");
+            }
+            if (!validate_token(auth_header, secretToken)) {
+                return crow::response(401, "Invalid token");
+            }
+
+            if (!decodeToken(auth_header, adminUsername, adminIsAdmin)) {
+                return crow::response(401, "Error decoding token");
+            }
+
+            if (!adminIsAdmin) {
+                return crow::response(401, "Unauthorized");
+            }
+
+            auto json_data = crow::json::load(request.body);
+            if (!json_data) {
+                return crow::response(400, "Invalid JSON");
+            }
+
+            try {
+                name = json_data["name"].s();
+                datetime = json_data["dateTime"].s();
+                if (!matchesIso8601(datetime)) {
+                    return crow::response(400, "Invalid date format");
+                }
+                description = json_data["description"].s();
+            }
+            catch(const exception& e) {
+                return crow::response(400, "Invalid JSON");
+            }
+            try {
+                createEvent(db, name, description, datetime);
+                crow::json::wvalue response;
+                response["name"] = name;
+                response["dateTime"] = datetime;
+                response["description"] = description;
+                return crow::response(200, response);
+            }
+            catch(const exception& e){
+                cout << e.what() << endl;
+                return crow::response(400, "Event creation failed");
+            }
+        }
+        else if (request.method == "GET"_method) {
+            vector<vector<string>> events = getAllEvents(db);
+            crow::json::wvalue response = crow::json::wvalue::object();
+            for (int i=0; i<events.size(); i++) {
+                response[i]["id"] = events[i][0];
+                response[i]["name"] = events[i][1];
+                response[i]["description"] = events[i][2];
+                response[i]["dateTime"] = events[i][3];
+            }
+            return crow::response(200, response);
+        }
     });
 
     studentSync.port(2028).run();
