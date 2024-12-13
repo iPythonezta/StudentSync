@@ -118,9 +118,10 @@ bool decodeToken(string token, string& username, bool& isAdmin) {
 }
 
 bool matchesIso8601(const string& date) {
-    return regex_match(date, regex(R"(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d)"));
-}
+    const regex iso8601Regex(R"(^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d(:[0-5]\d(\.\d+)?([+-][0-2]\d:[0-5]\d|Z)?)?$)");
 
+    return regex_match(date, iso8601Regex);
+}
 void createEvent(sqlite3* db, string title, string description, string schedule_at) {
     string sql = "INSERT INTO events (title, description, schedule_at) VALUES ('" + title + "', '" + description + "', '" + schedule_at + "');";
     sqlite3_stmt* stmt;
@@ -319,6 +320,38 @@ int main(void){
 
     });
 
+    CROW_ROUTE(studentSync, "/api/user/") // endpoint to return user data
+    .methods("GET"_method)
+    ([db](const crow::request& request){
+        string email, name;
+        bool isAdmin;
+        string auth_header = string(request.get_header_value("Authorization")).replace(0,7,"");
+        if (auth_header.empty()) {
+            return crow::response(401, "Authorization token is missing");
+        }
+
+        if (!validate_token(auth_header, secretToken)) {
+                return crow::response(401, "Invalid token");
+            }
+
+        if (!decodeToken(auth_header, email, isAdmin)) {
+            return crow::response(401, "Error decoding token");
+        }
+
+        string sqlStatement = "SELECT name, isAdmin FROM users WHERE email = '" + email + "';";
+        sqlite3_stmt* stmt;
+        sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
+        sqlite3_step(stmt);
+        name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+        isAdmin = sqlite3_column_int(stmt, 1);
+        sqlite3_finalize(stmt);
+        crow::json::wvalue response;
+        response["name"] = name;
+        response["isAdmin"] = isAdmin;
+        response["email"] = email;
+        return crow::response(200, response);
+    });
+
     CROW_ROUTE(studentSync, "/api/events/")
     .methods("GET"_method, "POST"_method)
     ([db](const crow::request& request){
@@ -343,6 +376,7 @@ int main(void){
 
             auto json_data = crow::json::load(request.body);
             if (!json_data) {
+                cout << "Invalid JSON" << endl;
                 return crow::response(400, "Invalid JSON");
             }
 
@@ -355,6 +389,7 @@ int main(void){
                 description = json_data["description"].s();
             }
             catch(const exception& e) {
+                cout << e.what() << endl;
                 return crow::response(400, "Invalid JSON");
             }
             try {

@@ -4,6 +4,7 @@ import logo from '../Assets/logo.PNG';
 import axios from "axios";
 import { useContextApi } from "../ContexApi";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 export default function Login(){
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -12,19 +13,22 @@ export default function Login(){
     const {token, setToken, login, setLogin} = useContextApi();
 
     const handleLogin = async(e) => {
-        var resp = await axios.post("http://localhost:2028/api/login/", {email, password});
+        var resp = await axios.post("http://localhost:2028/api/login/", {email, password}).catch((err) =>  toast.error("Invalid Credentials!"));
         if (resp.status == 200) {
             setToken(resp.data.token);
+            localStorage.setItem("token", resp.data.token);
             setLogin(true);
-            navigate("/");
+            toast.success("Login Successful, You will be redirected shortly!");
+            setTimeout(()=>(navigate("/")),1000);
         }
+        
     }
 
     useEffect(() => {
         if (login) {
             navigate("/");
         }
-    }, [])
+    }, [login]);
     
     return(
         <div style={{display:'flex'}}>
