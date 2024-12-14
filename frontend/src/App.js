@@ -1,18 +1,20 @@
-import logo from './logo.svg';
-import './App.css';
-import 'bootstrap/dist/css/bootstrap.min.css';
-import 'react-toastify/dist/ReactToastify.css';
 import {Container} from 'react-bootstrap';
 import Login from './Components/Login';
 import Home from './Components/Home';
+import Users from './Components/Users';
 import {BrowserRouter as Router, Route, Routes} from 'react-router-dom';
-import ContextProvider from './ContexApi';
 import {ToastContainer} from 'react-toastify';
 import { useContextApi } from './ContexApi';
 import { useEffect } from 'react';
+
+import ContextProvider from './ContexApi';
 import axios from 'axios';
+
+import 'bootstrap/dist/css/bootstrap.min.css';
+import 'react-toastify/dist/ReactToastify.css';
+import './App.css';
 function App() {
-  const { userData, setUserData, token, setToken, setLogin } = useContextApi();
+  const { userData, setUserData, token, setToken,login, setLogin } = useContextApi();
   useEffect(()=>{
     let tempTok = localStorage.getItem("token");
     setLogin(localStorage.getItem("token") != null);
@@ -33,7 +35,7 @@ function App() {
         });
     }
 
-  }, [])
+  }, [token, login])
   return (
       <>
         <ToastContainer />
@@ -41,6 +43,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/users" element={<Users />} />
           </Routes>
         </Router>
       </>

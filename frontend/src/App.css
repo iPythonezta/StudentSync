@@ -119,3 +119,35 @@ table.dates td {
 .color + span {
   font-weight: bold;
 }
+
+.events-list {
+  margin-top: -10px;
+}
+
+.event {
+  font-size: 16px;
+}
+
+.event:hover {
+  cursor: pointer;
+}
+
+.event-hd {
+  font-weight: bold;
+  font-size: 18px;
+  margin: 10px 0px;
+}
+
+.users-table  {
+  border: 1px solid rgba(31, 31, 31, 0.9) !important;
+}
+
+.users-table > * {
+  padding: 10px;
+  font-size: 17px;
+}
+
+.buttons-container {
+  display: flex;
+  justify-content: center;
+}

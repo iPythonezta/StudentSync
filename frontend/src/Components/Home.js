@@ -1,15 +1,19 @@
-import React, {useState, useEffect} from "react";
-import {Container, Form, Button, ModalHeader, ModalBody, ModalFooter} from 'react-bootstrap';
-import logo from '../Assets/logo.PNG';
-import axios from "axios";
-import { useContextApi } from "../ContexApi";
+import React, {useState, useEffect, useRef} from "react";
+
 import { useNavigate } from "react-router-dom";
-import { ToastContainer, toast } from 'react-toastify';
-import { Modal } from "react-bootstrap";
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+
+import { useContextApi } from "../ContexApi";
+import {Container, Form, Button, ModalHeader, ModalBody, ModalFooter, Modal} from 'react-bootstrap';
+
+import Tooltip from '@mui/material/Tooltip';
+import axios from "axios";
 import dayjs from "dayjs";
+import logo from '../Assets/logo.PNG';
+import { toast } from "react-toastify";
+
 export default function Home(){
 
     const {token, setToken, login, setLogin, userData} = useContextApi();
@@ -26,6 +30,8 @@ export default function Home(){
         dateTimeISO: dayjs(new Date()).toISOString()
     });
     const [selectedDate, setSelectedDate] = useState(new Date().getDate());
+
+    const container = useRef(null);
 
     const daysInMonth = (month, year) => new Date(year, month, 0).getDate();
     const getFirstDayOfMonth = (month, year) => new Date(year, month - 1, 1).getDay();
@@ -110,11 +116,26 @@ export default function Home(){
             }
         }).then((resp) => {
             console.log(resp);
+            toast.success("Event Added Successfully!");
             fetchEvents();
             setOpenAddMod(false);
         }).catch((err) => {
             console.log(err);
             setOpenAddMod(false);
+        })
+    }
+
+    const handleDeleteEvent = (id) => {
+        axios.delete(`http://localhost:2028/api/events/${id}/`, {
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        }).then((resp) => {
+            console.log(resp);
+            toast.success("Event Deleted Successfully!");
+            fetchEvents();
+        }).catch((err) => {
+            console.log(err);
         })
     }
 
@@ -139,7 +160,8 @@ export default function Home(){
             <Container className="sidebar" style={{maxWidth: "100%", backgroundColor: "#2463AB", width: "20%", padding: '0 !important', margin:'0 !important'}}>
                 <p className="h2 text-center mt-5" style={{color:'white'}}>Navigation</p>
                 <Container className="sidebar-links">
-                    <p className="nav-btn text-center active">Home</p>
+                    <p className="nav-btn text-center active" onClick={()=>navigate("/")}>Home</p>
+                    {userData?.isAdmin && <p className="nav-btn text-center" onClick={()=>navigate("/users")}>Users</p>}
                     <p className="nav-btn text-center">Aggregate Calculator</p>
                     <p className="nav-btn text-center">Group Former</p>
                     <p className="nav-btn text-center">Quiz Bank</p>
@@ -148,7 +170,7 @@ export default function Home(){
                 </Container>
             </Container>
             <Container className="main" style={{padding:'0', margin:'0', minHeight:'100vh'}}>
-                <Container className="header" style={{width:'100%', border:'1px solid black', padding: '0', margin:'0', minHeight:'15%'}}>
+                <Container className="header" style={{width:'100%', border:'1px solid black', padding: '0', margin:'0', maxHeight:'15%', height:'100px'}}>
                     <Container style={{padding: '20px', textAlign:'center', display:'flex', alignItems:'center', justifyContent:'center'}}>
                         <img src={logo} style={{width:'50px', height:'50px', marginRight:'10px'}} alt="logo" />
                         <p className="h1">StudentSync</p>
@@ -185,7 +207,7 @@ export default function Home(){
                                                     <tr className="dates-row">
                                                         {
                                                             week.map((day)=>{
-                                                                return <td className="date" onClick={() => {setSelectedDate(day)}} style={{backgroundColor: getColors(day)}}>{day}</td>
+                                                                return <td className="date" onClick={() => {setSelectedDate(day); container?.current?.scrollIntoView({behavior: "smooth"})}} style={{backgroundColor: getColors(day)}}>{day}</td>
                                                             })
                                                         }
                                                     </tr>
@@ -217,23 +239,35 @@ export default function Home(){
                                 <span style={{marginLeft:'10px'}}>&gt;= 3 tasks</span>
                             </Container>
                         </Container>
-                        <Container className="events" style={{width:'50%', marginBottom:'50px'}}>
-                            <p className="h6">Scheduled Tasks/Event</p>
+                        {eventsInCurrentMonth[selectedDate]?.length > 0 && <Container ref={container} className="events" style={{width:'100%', marginBottom:'50px'}}>
+                            <p className="m-3 event-hd">
+                                Schedule Tasks
+                                ({
+                                    new Date().toLocaleString('default', { month: 'long' }) + " " + selectedDate + ", " + new Date().getFullYear()
+                                })
+                            </p>
                             <ul className="events-list">    
                                 {
                                     eventsInCurrentMonth[selectedDate]?.map((event) => {
                                         return (
-                                                <li className="event">
-                                                    <strong>
-                                                        {event.name} -- {new Date(event.dateTime).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })
-                                                    }
-                                                    </strong>
+                                            <li className="event" style={{width:'fit-content'}}>
+                                                    <Tooltip title={event.description} arrow placement="right">
+                                                        {event.name} -- {new Date(event.dateTime).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}
+                                                    </Tooltip>
+                                                        {
+                                                            userData?.isAdmin &&
+                                                            <Tooltip title="Delete Event" arrow placement="right">
+                                                                <Button variant="danger" style={{marginLeft:'10px', height:'20px',width:'30px', fontSize:'10px', padding:'0px', display:'inline-flex', justifyContent:'center', alignItems:'center'}} onClick={() => {handleDeleteEvent(event.id)}}>
+                                                                    X
+                                                                </Button>
+                                                            </Tooltip>
+                                                        }
                                                 </li>
                                         )
                                     })
                                 }
                             </ul>
-                        </Container>
+                        </Container>}
                     </Container>
                 
                     <Container className="modals-container">

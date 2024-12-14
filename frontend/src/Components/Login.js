@@ -10,7 +10,7 @@ export default function Login(){
     const [password, setPassword] = useState("");
     const navigate = useNavigate();
 
-    const {token, setToken, login, setLogin} = useContextApi();
+    const {token, setToken, login, setLogin, setUserData} = useContextApi();
 
     const handleLogin = async(e) => {
         var resp = await axios.post("http://localhost:2028/api/login/", {email, password}).catch((err) =>  toast.error("Invalid Credentials!"));
@@ -21,6 +21,7 @@ export default function Login(){
             toast.success("Login Successful, You will be redirected shortly!");
             setTimeout(()=>(navigate("/")),1000);
         }
+        
         
     }
 
