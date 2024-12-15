@@ -161,6 +161,26 @@ vector<vector<string>> getAllEvents(sqlite3* db){
     return events;
 }
 
+vector<vector<string>> getAllSubjects(sqlite3* db){
+    vector<vector<string>> subjects;
+    string sqlQuery = "SELECT id, name, credits, quiz_weightage, assignment_weightage, mids_weightage, finals_weightage FROM subject;";
+    sqlite3_stmt* stmt;
+    vector<string> tempSubject;
+    sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {    
+        tempSubject.clear();
+        tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+        tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+        tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+        tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3))));
+        tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4))));
+        tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5))));
+        tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6))));
+        subjects.push_back(tempSubject);
+    }
+    return subjects;
+}
+
 struct CORS {
     struct context {};
 
@@ -196,7 +216,7 @@ int main(void){
     }
 
 
-    const char* create_user = R"(
+    string create_user = R"(
         CREATE TABLE IF NOT EXISTS users (
         email TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
@@ -205,7 +225,7 @@ int main(void){
         );
     )";
 
-    const char* create_events = R"(
+    string create_events = R"(
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -214,11 +234,27 @@ int main(void){
         )
     )";
 
-
-    if (executeSQL(db, create_user) && executeSQL(db, create_events)) {
-        return -1;
+    string create_subject = R"(
+        CREATE TABLE IF NOT EXISTS subject (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            credits INTEGER NOT NULL,
+            quiz_weightage INTEGER NOT NULL,
+            assignment_weightage INTEGER NOT NULL,
+            mids_weightage INTEGER NOT NULL,
+            finals_weightage INTEGER NOT NULL
+        )
+    )";
+    
+    try {
+        sqlite3_exec(db, create_user.c_str(), nullptr, 0, nullptr);
+        sqlite3_exec(db, create_events.c_str(), nullptr, 0, nullptr);
+        sqlite3_exec(db, create_subject.c_str(), nullptr, 0, nullptr);
     }
-
+    catch(const exception& e) {
+            cout << e.what() << endl;
+    }
+    
     defaultAdminUser(db);
 
     crow::App<CORS> studentSync;
@@ -505,6 +541,10 @@ int main(void){
             }
         }
         else if (request.method == "GET"_method) {
+            string auth_header = string(request.get_header_value("Authorization")).replace(0,7,"");
+            if (auth_header.empty() || !validate_token(auth_header, secretToken)) {
+                return crow::response(401, "You must be logged in to view this data");
+            }
             vector<vector<string>> events = getAllEvents(db);
             crow::json::wvalue response = crow::json::wvalue::object();
             for (int i=0; i<events.size(); i++) {
@@ -545,6 +585,161 @@ int main(void){
         catch(const exception& e) {
             return crow::response(400, "Error deleting event");
         }
+    });
+
+    CROW_ROUTE(studentSync, "/api/subjects/")
+    .methods("GET"_method, "POST"_method)
+    ([db](const crow::request& request){
+        string adminUsername, name;
+        bool adminIsAdmin;
+        string sub_name;
+        int credits, quiz_weightage, assignment_weightage, mids_weightage, finals_weightage;
+        string auth_header = string(request.get_header_value("Authorization")).replace(0,7,"");
+        if (request.method == "POST"_method) {
+            if (auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, adminUsername, adminIsAdmin) || !adminIsAdmin) {
+                return crow::response(401, "You are not authorized to perform this action");
+            }
+
+            auto json_data = crow::json::load(request.body);
+            if (!json_data) {
+                return crow::response(400, "Invalid JSON");
+            }
+
+            try {
+                sub_name = json_data["name"].s();
+                credits = json_data["credits"].i();
+                quiz_weightage = json_data["quiz_weightage"].i();
+                assignment_weightage = json_data["assignment_weightage"].i();
+                mids_weightage = json_data["mids_weightage"].i();
+                finals_weightage = json_data["finals_weightage"].i();
+            }
+            catch(exception& e) {
+                return crow::response(400, "Invalid JSON");
+            }
+            string sqlStmt = "INSERT INTO subject (name, credits, quiz_weightage, assignment_weightage, mids_weightage, finals_weightage) VALUES ('" + sub_name + "', " + to_string(credits) + ", " + to_string(quiz_weightage) + ", " + to_string(assignment_weightage) + ", " + to_string(mids_weightage) + ", " + to_string(finals_weightage) + ");";
+            try {
+                int result = executeSQL(db, sqlStmt.c_str());
+                if (result == 0){
+                    crow::json::wvalue response;
+                    response["name"] = sub_name;
+                    response["credits"] = credits;
+                    response["quiz_weightage"] = quiz_weightage;
+                    response["assignment_weightage"] = assignment_weightage;
+                    response["mids_weightage"] = mids_weightage;
+                    response["finals_weightage"] = finals_weightage;
+                    return crow::response(200, response);
+                }
+                else {
+                    return crow::response(400, "Error creating subject");
+                }
+            }
+            catch(const exception& e) {
+                return crow::response(400, "Error creating subject");
+            }
+        };
+
+        if (request.method == "GET"_method) {
+
+            if(auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, adminUsername, adminIsAdmin)) {
+                return crow::response(401, "You must be logged in to view this data");
+            }
+
+            vector<vector<string>> subjects = getAllSubjects(db);
+            crow::json::wvalue response = crow::json::wvalue::object();
+            vector<crow::json::wvalue> responseArray;
+            crow::json::wvalue json_item;
+            for (int i = 0; i < subjects.size(); i++) {
+                json_item["id"] = subjects[i][0];
+                json_item["name"] = subjects[i][1];
+                json_item["credits"] = subjects[i][2];
+                json_item["quiz_weightage"] = subjects[i][3];
+                json_item["assignment_weightage"] = subjects[i][4];
+                json_item["mids_weightage"] = subjects[i][5];
+                json_item["finals_weightage"] = subjects[i][6];
+                responseArray.push_back(move(json_item));
+            }
+            response["subjects"] = move(responseArray);
+            return crow::response(200, response);
+        }
+    });
+
+    CROW_ROUTE(studentSync, "/api/subjects/<int>/")
+    .methods("GET"_method, "PUT"_method, "DELETE"_method)
+    ([db](const crow::request& request, int id){
+        string adminUsername;
+        bool adminIsAdmin;
+        string auth_header = string(request.get_header_value("Authorization")).replace(0,7,"");
+        if (auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, adminUsername, adminIsAdmin)) {
+            return crow::response(401, "You must be logged in to view this data");
+        }
+        if (request.method == "GET"_method) {
+            string sqlQuery = "SELECT id, name, credits, quiz_weightage, assignment_weightage, mids_weightage, finals_weightage FROM subject WHERE id = " + to_string(id) + ";";
+            sqlite3_stmt* stmt;
+            crow::json::wvalue subject;
+            sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+            sqlite3_step(stmt);
+            subject["id"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+            subject["name"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)));
+            subject["credits"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2)));
+            subject["quiz_weightage"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3)));
+            subject["assignment_weightage"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4)));
+            subject["mids_weightage"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5)));
+            subject["finals_weightage"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6)));
+            sqlite3_finalize(stmt);
+            return crow::response(200, subject);
+        }
+        else if (request.method == "PUT"_method){
+            if (!adminIsAdmin) {
+                return crow::response(401, "You are not authorized to perform this action");
+            }
+            auto json_data = crow::json::load(request.body);
+            if (!json_data) {
+                return crow::response(400, "Invalid JSON");
+            }
+            string name, credits, quiz_weightage, assignment_weightage, mids_weightage, finals_weightage;
+            try {
+                name = json_data["name"].s();
+                credits = json_data["credits"].s();
+                quiz_weightage = json_data["quiz_weightage"].s();
+                assignment_weightage = json_data["assignment_weightage"].s();
+                mids_weightage = json_data["mids_weightage"].s();
+                finals_weightage = json_data["finals_weightage"].s();
+            }
+            catch(const exception& e) {
+                return crow::response(400, "Invalid JSON");
+            }
+            string sql = "UPDATE subject SET name = '" + name + "', credits = " + credits + ", quiz_weightage = " + quiz_weightage + ", assignment_weightage = " + assignment_weightage + ", mids_weightage = " + mids_weightage + ", finals_weightage = " + finals_weightage + " WHERE id = " + to_string(id) + ";";
+            int result = executeSQL(db, sql.c_str());
+            if (result == 0) {
+                crow::json::wvalue response;
+                response["id"] = id;
+                response["name"] = name;
+                response["credits"] = credits;
+                response["quiz_weightage"] = quiz_weightage;
+                response["assignment_weightage"] = assignment_weightage;
+                response["mids_weightage"] = mids_weightage;
+                response["finals_weightage"] = finals_weightage;
+                return crow::response(200, response);
+            }
+            else {
+                return crow::response(400, "Error updating subject");
+            }
+        }
+
+        else if (request.method == "DELETE"_method) {
+            if (!adminIsAdmin) {
+                return crow::response(401, "You are not authorized to perform this action");
+            }
+            string sql = "DELETE FROM subject WHERE id = " + to_string(id) + ";";
+            int result = executeSQL(db, sql.c_str());
+            if (result == 0) {
+                return crow::response(200, "Subject deleted");
+            }
+            else {
+                return crow::response(400, "Error deleting subject");
+            }
+        }
+            
     });
 
     studentSync.port(2028).run();

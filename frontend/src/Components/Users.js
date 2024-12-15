@@ -68,8 +68,10 @@ export default function Users(){
         if (!login ||  !userData?.isAdmin) {
             navigate("/login")
         }
-        fetchUsers();
-    }, [login]);
+        if (token){
+            fetchUsers();
+        }
+    }, [login, token]);
     
     
     return(
@@ -79,7 +81,7 @@ export default function Users(){
                 <Container className="sidebar-links">
                     <p className="nav-btn text-center" onClick={()=>navigate("/")}>Home</p>
                     {userData?.isAdmin && <p className="nav-btn text-center active" onClick={()=>navigate("/users")}>Users</p>}
-                    <p className="nav-btn text-center">Aggregate Calculator</p>
+                    <p className="nav-btn text-center" onClick={()=>navigate("/aggregate-calculator")}>Aggregate Calculator</p>
                     <p className="nav-btn text-center">Group Former</p>
                     <p className="nav-btn text-center">Quiz Bank</p>
                     <p className="nav-btn text-center">Your Profile</p>

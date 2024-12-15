@@ -2,6 +2,7 @@ import {Container} from 'react-bootstrap';
 import Login from './Components/Login';
 import Home from './Components/Home';
 import Users from './Components/Users';
+import AggregateCalculatorHome from './Components/AggregateCalculatorHome';
 import {BrowserRouter as Router, Route, Routes} from 'react-router-dom';
 import {ToastContainer} from 'react-toastify';
 import { useContextApi } from './ContexApi';
@@ -44,6 +45,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/users" element={<Users />} />
+            <Route path="/aggregate-calculator" element={<AggregateCalculatorHome />} />
           </Routes>
         </Router>
       </>

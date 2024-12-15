@@ -143,12 +143,14 @@ export default function Home(){
         if (!login) {
             navigate("/login")
         }
-        let tempCalendar = generateCalendar(new Date().getMonth()+1, new Date().getFullYear());
-        setCalendar(tempCalendar);
-        let tempWeeks = returnWeeksArray(tempCalendar);
-        setWeeks(tempWeeks);
-        fetchEvents();
-    }, [login]);
+        if (token){
+            let tempCalendar = generateCalendar(new Date().getMonth()+1, new Date().getFullYear());
+            setCalendar(tempCalendar);
+            let tempWeeks = returnWeeksArray(tempCalendar);
+            setWeeks(tempWeeks);
+            fetchEvents();
+        }
+    }, [login, token]);
     
     useEffect(() => {
         eventsByDate();
@@ -162,7 +164,7 @@ export default function Home(){
                 <Container className="sidebar-links">
                     <p className="nav-btn text-center active" onClick={()=>navigate("/")}>Home</p>
                     {userData?.isAdmin && <p className="nav-btn text-center" onClick={()=>navigate("/users")}>Users</p>}
-                    <p className="nav-btn text-center">Aggregate Calculator</p>
+                    <p className="nav-btn text-center" onClick={()=>navigate("/aggregate-calculator")}>Aggregate Calculator</p>
                     <p className="nav-btn text-center">Group Former</p>
                     <p className="nav-btn text-center">Quiz Bank</p>
                     <p className="nav-btn text-center">Your Profile</p>
