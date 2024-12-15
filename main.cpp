@@ -181,6 +181,70 @@ vector<vector<string>> getAllSubjects(sqlite3* db){
     return subjects;
 }
 
+vector<vector<string>> getAllQuizes(sqlite3* db, int subject_id){
+    vector<vector<string>> quizes;
+    string sqlQuery = "SELECT id, quiz_name, quiz_marks FROM quizes WHERE subject_id = " + to_string(subject_id) + ";";
+    sqlite3_stmt* stmt;
+    vector<string> tempQuiz;
+    sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        tempQuiz.clear();
+        tempQuiz.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+        tempQuiz.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+        tempQuiz.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+        quizes.push_back(tempQuiz);
+    }
+    return quizes;
+}
+
+vector<vector<string>> getAllAssignments(sqlite3* db, int subject_id){
+    vector<vector<string>> assignments;
+    string sqlQuery = "SELECT id, assignment_name, assignment_marks FROM assignments WHERE subject_id = " + to_string(subject_id) + ";";
+    sqlite3_stmt* stmt;
+    vector<string> tempAssignment;
+    sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        tempAssignment.clear();
+        tempAssignment.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+        tempAssignment.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+        tempAssignment.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+        assignments.push_back(tempAssignment);
+    }
+    return assignments;
+}
+
+vector<vector<string>> getAllMids(sqlite3* db, int subject_id){
+    vector<vector<string>> mids;
+    string sqlQuery = "SELECT id, mid_name, mid_marks FROM mids WHERE subject_id = " + to_string(subject_id) + ";";
+    sqlite3_stmt* stmt;
+    vector<string> tempMid;
+    sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        tempMid.clear();
+        tempMid.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+        tempMid.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+        tempMid.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+        mids.push_back(tempMid);
+    }
+    return mids;
+}
+
+vector<vector<string>> getAllFinals(sqlite3* db, int subject_id){
+    vector<vector<string>> finals;
+    string sqlQuery = "SELECT id, final_name, final_marks FROM finals WHERE subject_id = " + to_string(subject_id) + ";";
+    sqlite3_stmt* stmt;
+    vector<string> tempFinal;
+    sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        tempFinal.clear();
+        tempFinal.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+        tempFinal.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+        tempFinal.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+        finals.push_back(tempFinal);
+    }
+    return finals;
+}
+
 struct CORS {
     struct context {};
 
@@ -245,11 +309,55 @@ int main(void){
             finals_weightage INTEGER NOT NULL
         )
     )";
+
+    string create_quizes = R"(
+        CREATE TABLE IF NOT EXISTS quizes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL,
+            quiz_name TEXT NOT NULL,
+            quiz_marks INTEGER NOT NULL,
+            FOREIGN KEY (subject_id) REFERENCES subject(id)
+        )
+    )";
+
+    string create_assignments = R"(
+        CREATE TABLE IF NOT EXISTS assignments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL,
+            assignment_name TEXT NOT NULL,
+            assignment_marks INTEGER NOT NULL,
+            FOREIGN KEY (subject_id) REFERENCES subject(id)
+        )
+    )";
+
+    string create_mids = R"(
+        CREATE TABLE IF NOT EXISTS mids (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL,
+            mid_name TEXT NOT NULL,
+            mid_marks INTEGER NOT NULL,
+            FOREIGN KEY (subject_id) REFERENCES subject(id)
+        )
+    )";
+
+    string create_finals = R"(
+        CREATE TABLE IF NOT EXISTS finals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL,
+            final_name TEXT NOT NULL,
+            final_marks INTEGER NOT NULL,
+            FOREIGN KEY (subject_id) REFERENCES subject(id)
+        )    
+    )";
     
     try {
         sqlite3_exec(db, create_user.c_str(), nullptr, 0, nullptr);
         sqlite3_exec(db, create_events.c_str(), nullptr, 0, nullptr);
         sqlite3_exec(db, create_subject.c_str(), nullptr, 0, nullptr);
+        sqlite3_exec(db, create_quizes.c_str(), nullptr, 0, nullptr);
+        sqlite3_exec(db, create_assignments.c_str(), nullptr, 0, nullptr);
+        sqlite3_exec(db, create_mids.c_str(), nullptr, 0, nullptr);
+        sqlite3_exec(db, create_finals.c_str(), nullptr, 0, nullptr);
     }
     catch(const exception& e) {
             cout << e.what() << endl;
@@ -686,8 +794,42 @@ int main(void){
             subject["mids_weightage"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5)));
             subject["finals_weightage"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6)));
             sqlite3_finalize(stmt);
+            vector<vector<string>> quizes = getAllQuizes(db, id);
+            vector<vector<string>> assignments = getAllAssignments(db, id);
+            vector<vector<string>> mids = getAllMids(db, id);
+            vector<vector<string>> finals = getAllFinals(db, id);
+
+            for (int i=0; i<quizes.size(); i++) {
+                subject["quizes"][i] = crow::json::wvalue::object();
+                subject["quizes"][i]["quiz_id"] = quizes[i][0];
+                subject["quizes"][i]["quiz_name"] = quizes[i][1];
+                subject["quizes"][i]["quiz_marks"] = quizes[i][2];
+            }
+
+            for (int i=0; i<assignments.size(); i++) {
+                subject["assignments"][i] = crow::json::wvalue::object();
+                subject["assignments"][i]["assignment_id"] = assignments[i][0];
+                subject["assignments"][i]["assignment_name"] = assignments[i][1];
+                subject["assignments"][i]["assignment_marks"] = assignments[i][2];
+            }
+
+            for (int i=0; i<mids.size(); i++) {
+                subject["mids"][i] = crow::json::wvalue::object();
+                subject["mids"][i]["mid_id"] = mids[i][0];
+                subject["mids"][i]["mid_name"] = mids[i][1];
+                subject["mids"][i]["mid_marks"] = mids[i][2];
+            }
+
+            for (int i=0; i<finals.size(); i++) {
+                subject["finals"][i] = crow::json::wvalue::object();
+                subject["finals"][i]["final_id"] = finals[i][0];
+                subject["finals"][i]["final_name"] = finals[i][1];
+                subject["finals"][i]["final_marks"] = finals[i][2];
+            }
+
             return crow::response(200, subject);
         }
+        
         else if (request.method == "PUT"_method){
             if (!adminIsAdmin) {
                 return crow::response(401, "You are not authorized to perform this action");
@@ -741,6 +883,127 @@ int main(void){
         }
             
     });
+
+    CROW_ROUTE(studentSync, "/api/subjects/<int>/add-task/")
+    .methods("POST"_method)
+    ([db](const crow::request& request, int id){
+        string adminUsername;
+        bool adminIsAdmin;
+        string auth_header = string(request.get_header_value("Authorization")).replace(0,7,"");
+        if (auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, adminUsername, adminIsAdmin)) {
+            return crow::response(401, "You must be logged in to view this data");
+        }
+        if (!adminIsAdmin) {
+            return crow::response(401, "You are not authorized to perform this action");
+        }
+        auto json_data = crow::json::load(request.body);
+        if (!json_data) {
+            return crow::response(400, "Invalid JSON");
+        }
+        string taskType = json_data["taskType"].s();
+        string taskName = json_data["taskName"].s();
+        int taskMarks = json_data["taskMarks"].i();
+        string sql;
+        if (taskType == "quiz") {  
+            sql = "INSERT INTO quizes (subject_id, quiz_name, quiz_marks) VALUES (" + to_string(id) + ", '" + taskName + "', " + to_string(taskMarks) + ");";
+        }
+        else if (taskType == "assignment") {
+            sql = "INSERT INTO assignments (subject_id, assignment_name, assignment_marks) VALUES (" + to_string(id) + ", '" + taskName + "', " + to_string(taskMarks) + ");";
+        }
+        else if (taskType == "mid") {
+            sql = "INSERT INTO mids (subject_id, mid_name, mid_marks) VALUES (" + to_string(id) + ", '" + taskName + "', " + to_string(taskMarks) + ");";
+        }
+        else if (taskType == "final") {
+            sql = "INSERT INTO finals (subject_id, final_name, final_marks) VALUES (" + to_string(id) + ", '" + taskName + "', " + to_string(taskMarks) + ");";
+        }
+        else {
+            return crow::response(400, "Invalid task type");
+        }
+        int result = executeSQL(db, sql.c_str());
+        if (result == 0) {
+            return crow::response(200, "Task added");
+        }
+        else {
+            return crow::response(400, "Error adding task");
+        }
+    });
+
+    CROW_ROUTE(studentSync, "/api/subjects/activity/<int>/")
+    .methods("DELETE"_method)
+    ([db](const crow::request& request, int id){
+        string adminUsername;
+        bool adminIsAdmin;
+        string auth_header = string(request.get_header_value("Authorization")).replace(0,7,"");
+        if (auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, adminUsername, adminIsAdmin)) {
+            return crow::response(401, "You must be logged in to view this data");
+        }
+        if (!adminIsAdmin) {
+            return crow::response(401, "You are not authorized to perform this action");
+        }
+        auto json_data = crow::json::load(request.body);
+        if (!json_data) {
+            return crow::response(400, "Invalid JSON");
+        }
+        string taskType = json_data["taskType"].s();
+        string sql;
+        if (taskType == "quiz") {  
+            sql = "DELETE FROM quizes WHERE id = " + to_string(id) + ";";
+        }
+        else if (taskType == "assignment") {
+            sql = "DELETE FROM assignments WHERE id = " + to_string(id) + ";";
+        }
+        else if (taskType == "mid") {
+            sql = "DELETE FROM mids WHERE id = " + to_string(id) + ";";
+        }
+        else if (taskType == "final") {
+            sql = "DELETE FROM finals WHERE id = " + to_string(id) + ";";
+        }
+        else {
+            return crow::response(400, "Invalid task type");
+        }
+        int result = executeSQL(db, sql.c_str());
+        if (result == 0) {
+            return crow::response(200, "Task deleted");
+        }
+        else {
+            return crow::response(400, "Error deleting task");
+        }
+    });
+
+    CROW_ROUTE(studentSync, "/api/calculate-aggregate/")
+    .methods("POST"_method)
+    ([db](const crow::request& request){
+        string adminUsername;
+        bool adminIsAdmin;
+        string auth_header = string(request.get_header_value("Authorization")).replace(0,7,"");
+        if (auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, adminUsername, adminIsAdmin)) {
+            return crow::response(401, "You must be logged in to view this data");
+        }
+        auto json_data = crow::json::load(request.body);
+        if (!json_data) {
+            return crow::response(400, "Invalid JSON");
+        }
+        
+        auto data = json_data["data"];
+        cout << data;
+
+
+        // ayo Asim, complete the code to calculate the aggregate
+        // data is your input and it would look something like this (it is an array of json objects in simple words)
+        // [{"type":"quiz","name":"Quiz 1","marks":"10","total_marks":"10"},{"type":"assignment","name":"Assignment 01","marks":"15","total_marks":"20"}]
+        // to access the 1st element you can use like data[0]
+        // it will give you something like this {"type":"quiz","name":"Quiz 1","marks":"10","total_marks":"10"}
+        // to access the type you can use data[0]["type"].s() which will give you "quiz"
+        // to access the marks you can use data[0]["marks"].s() which will give you "10"
+
+        // now your task is to calculate the aggregate and return it in the response
+        // data.size() will give you the number of elements in the data array (similar to data.length() for arrays)
+        crow::json::wvalue response;
+        response["aggregate"] = 0; // replace 0 with the calculated aggregate
+        return crow::response(200, response);
+
+    });
+
 
     studentSync.port(2028).run();
 
