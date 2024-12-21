@@ -13,7 +13,7 @@ void defaultAdminUser(sqlite3* db);
 void getUserData(sqlite3* db, string email, string password, string& name, bool& isAdmin);
 void createEvent(sqlite3* db, string title, string description, string schedule_at);
 void deleteEvent(sqlite3* db, int id);
-
+string toLowerCase(const string& input);
 bool studentMarksToFile(string userEmail, string assesmentType, string obtainedMarks, string subjectId, string subName, string assesmentId);
 bool checkUserExxisits(sqlite3* db, string email);
 bool createUser(sqlite3* db, string email, string name, string password, bool isAdmin);
