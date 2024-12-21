@@ -5,7 +5,7 @@
 #include <vector>
 #include <regex>
 #include <cctype>
-
+#include <sstream>
 using namespace std;
 const string secretToken = "e6a76430104f92883b23e707051da61c56172e9276d7b90378b0942d022d4646";
 
@@ -802,12 +802,19 @@ int main(void){
        cout << data;
        bool result;
        cout << data.size();
+       string marks;
+       
        for (int i=0; i<data.size(); i++) {
-            cout << i << endl;
+            try {
+                marks = to_string(data[i]["marks"].d());
+            }catch(const exception& e) {
+                marks = data[i]["marks"].s();
+            }
+            
             result = studentMarksToFile(
                 username, 
                 data[i]["type"].s(), 
-                to_string(data[i]["marks"].d()),
+                marks,
                 data[i]["subject_id"].s(), 
                 data[i]["subject_name"].s(), 
                 data[i]["task_id"].s()
@@ -824,16 +831,21 @@ int main(void){
        mids_weightage = sqlite3_column_double(stmt, 2);
        finals_weightage = sqlite3_column_double(stmt, 3);
        sqlite3_finalize(stmt);
-
-       // Calculate aggregate
+       
        double totalMarksObtained = 0.0;
        double totalMarks = 0.0;
 
        for (size_t i = 0; i < data.size(); i++) {
         cout << i;
            try {
+                double marks_;
                // Extract marks and total_marks from the current JSON object
-               double marksObtained = data[i]["marks"].d();
+               try {
+                     marks_ = data[i]["marks"].d();
+                } catch (const exception& e) {
+                     marks_ = stod(data[i]["marks"].s());
+               }
+               double marksObtained = marks_;
                double totalMarksForItem = stod(data[i]["total_marks"].s());
 
                // Add to totals
@@ -860,18 +872,46 @@ int main(void){
    studentSync.port(2028).run();
 
 }
-
-bool studentMarksToFile(string userEmail, string assesmentType, string obtainedMarks, string subjectId, string subName, string assesmentId){
+bool studentMarksToFile(string userEmail, string assesmentType, string obtainedMarks, string subjectId, string subName, string assesmentId) {
     fstream file;
     string filePath = "student_marks/" + subName + "_" + subjectId + ".csv";
-    file.open(filePath, ios::out | ios::app);
+    vector<string> data;
+    string line;
+
+    // Open file for reading
+    file.open(filePath, ios::in | ios::app);
     if (!file.is_open()) {
+        cout << "Error opening file for reading." << endl;
         return false;
     }
-    file << userEmail << "," << assesmentType << "," << assesmentId << "," << obtainedMarks << endl;
+
+    // Read all lines from the file
+    while (getline(file, line)) {
+        data.push_back(line);
+        cout << line << endl;
+    }
+    file.close(); // Close after reading
+
+    // Check and edit existing data
+    file.open(filePath, ios::out);
+    bool done = false;
+    for (int i = 0; i < data.size(); i++) {
+        if (data[i].find(userEmail) != string::npos && data[i].find(assesmentType) != string::npos && data[i].find(assesmentId) != string::npos) {
+            data[i] = userEmail + "," + assesmentType + "," + assesmentId + "," + obtainedMarks;
+            done = true;
+        }
+        cout << data[i] << endl;
+        file << data[i] << endl;
+    }
+
+    if (!done) {
+        file << userEmail << "," << assesmentType << "," << assesmentId << "," << obtainedMarks << endl;
+    }
+
     file.close();
     return true;
 }
+
 
 int studentMarksFromFile(string userEmail, string assesmentType, int subjectId, string subName, int assesmentId){
     fstream file;
