@@ -787,10 +787,10 @@ int main(void){
    CROW_ROUTE(studentSync, "/api/calculate-aggregate/")
    .methods("POST"_method)
    ([db](const crow::request& request){
-       string adminUsername;
+       string username;
        bool adminIsAdmin;
        string auth_header = string(request.get_header_value("Authorization")).replace(0,7,"");
-       if (auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, adminUsername, adminIsAdmin)) {
+       if (auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, username, adminIsAdmin)) {
            return crow::response(401, "You must be logged in to view this data");
        }
        auto json_data = crow::json::load(request.body);
@@ -800,26 +800,40 @@ int main(void){
        
        auto data = json_data["data"];
        cout << data;
-
-        bool result;
+       bool result;
+       cout << data.size();
        for (int i=0; i<data.size(); i++) {
+            cout << i << endl;
             result = studentMarksToFile(
-                adminUsername, 
+                username, 
                 data[i]["type"].s(), 
-                data[i]["marks"].s() ,
+                to_string(data[i]["marks"].d()),
                 data[i]["subject_id"].s(), 
                 data[i]["subject_name"].s(), 
                 data[i]["task_id"].s()
             );
        }
        // Aggregate calculation
+       sqlite3_stmt* stmt;
+       double quiz_weightage, assignment_weightage, mids_weightage, finals_weightage;
+       string sql = "SELECT quiz_weightage, assignment_weightage, mids_weightage, finals_weightage FROM subject WHERE id = " + string(data[0]["subject_id"].s()) + ";";
+       sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+       sqlite3_step(stmt);
+       quiz_weightage = sqlite3_column_double(stmt, 0);
+       assignment_weightage = sqlite3_column_double(stmt, 1);
+       mids_weightage = sqlite3_column_double(stmt, 2);
+       finals_weightage = sqlite3_column_double(stmt, 3);
+       sqlite3_finalize(stmt);
+
+       // Calculate aggregate
        double totalMarksObtained = 0.0;
        double totalMarks = 0.0;
 
        for (size_t i = 0; i < data.size(); i++) {
+        cout << i;
            try {
                // Extract marks and total_marks from the current JSON object
-               double marksObtained = stod(data[i]["marks"].s());
+               double marksObtained = data[i]["marks"].d();
                double totalMarksForItem = stod(data[i]["total_marks"].s());
 
                // Add to totals
@@ -827,6 +841,8 @@ int main(void){
                totalMarks += totalMarksForItem;
            }
            catch (const exception& e) {
+               // Return error response
+               cout << e.what() << endl;
                return crow::response(400, "Invalid marks or total_marks format in one or more items.");
            }
        }
