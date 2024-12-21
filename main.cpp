@@ -8,271 +8,34 @@
 using namespace std;
 const string secretToken = "e6a76430104f92883b23e707051da61c56172e9276d7b90378b0942d022d4646";
 
-bool studentMarksToFile(string userEmail, string assesmentType, string obtainedMarks, string subjectId, string subName, string assesmentId){
-    fstream file;
-    string filePath = "student_marks/" + subName + "_" + subjectId + ".csv";
-    file.open(filePath, ios::out | ios::app);
-    if (!file.is_open()) {
-        return false;
-    }
-    file << userEmail << "," << assesmentType << "," << assesmentId << "," << obtainedMarks << endl;
-    file.close();
-    return true;
-}
+void defaultAdminUser(sqlite3* db);
+void getUserData(sqlite3* db, string email, string password, string& name, bool& isAdmin);
+void createEvent(sqlite3* db, string title, string description, string schedule_at);
+void deleteEvent(sqlite3* db, int id);
 
-int studentMarksFromFile(string userEmail, string assesmentType, int subjectId, string subName, int assesmentId){
-    fstream file;
-    string filePath = "student_marks/" + subName + "_" + to_string(subjectId) + ".csv";
-    file.open(filePath, ios::in);
-    if (!file.is_open()) {
-        return 0;
-    }
-    string line;
-    while (getline(file, line)) {
-        if (line.find(userEmail) != string::npos && line.find(assesmentType) != string::npos && line.find(to_string(assesmentId)) != string::npos) {
-            string marks = line.substr(line.find_last_of(",") + 1);
-            return stoi(marks);
-        }
-    }
-}
+bool studentMarksToFile(string userEmail, string assesmentType, string obtainedMarks, string subjectId, string subName, string assesmentId);
+bool checkUserExxisits(sqlite3* db, string email);
+bool createUser(sqlite3* db, string email, string name, string password, bool isAdmin);
+bool deleteUser(sqlite3* db, string email);
+bool changePassword(sqlite3* db, string email, string newPassword);
+bool login(sqlite3* db, string email, string password);
+bool validate_token(string token, string secretToken);
+bool decodeToken(string token, string& username, bool& isAdmin);
+bool matchesIso8601(const string& date);
 
+int studentMarksFromFile(string userEmail, string assesmentType, int subjectId, string subName, int assesmentId);
+int executeSQL(sqlite3* db, const char* sql);
 
-int executeSQL(sqlite3* db, const char* sql) {
-   char* errorMessage;
-   int exit = sqlite3_exec(db, sql, nullptr, 0, &errorMessage);
-
-   if (exit != SQLITE_OK) {
-       cout << "Error executing SQL: " << errorMessage << endl;
-       sqlite3_free(errorMessage);
-       return 1;
-   }
-   return 0;
-}
-
-bool checkUserExxisits(sqlite3* db, string email) {
-   string sql = "SELECT email FROM users WHERE email = '" + email + "';";
-   sqlite3_stmt* stmt;
-   sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
-   int result = sqlite3_step(stmt);
-   sqlite3_finalize(stmt);
-   return result == SQLITE_ROW;
-}
-
-bool createUser(sqlite3* db, string email, string name, string password, bool isAdmin) {
-   if (checkUserExxisits(db, email)) {
-       cout << "User already exists" << endl;
-       return false; // return false if user already exists
-   }
-   string sql = "INSERT INTO users (email, name, password, isAdmin) VALUES ('" + email + "', '" + name + "', '" + password + "', " + to_string(isAdmin) + ");";
-   executeSQL(db, sql.c_str());
-   return true; // return true if user is created
-}
-
-bool deleteUser(sqlite3* db, string email) {
-   if (!checkUserExxisits(db, email)) {
-       cout << "User does not exist" << endl;
-       return false; // return false if user does not exist
-   }
-   string sql = "DELETE FROM users WHERE email = '" + email + "';";
-   executeSQL(db, sql.c_str());
-   return true; // return true if user is deleted
-}
-
-bool changePassword(sqlite3* db, string email, string newPassword) {
-   if (!checkUserExxisits(db, email)) {
-       cout << "User does not exist" << endl;
-       return false; // return false if user does not exist
-   }
-   string sql = "UPDATE users SET password = '" + newPassword + "' WHERE email = '" + email + "';";
-   executeSQL(db, sql.c_str());
-   return true; // return true if password is changed
-}
-
-void defaultAdminUser(sqlite3* db) {
-   if (checkUserExxisits(db, "admin")) {
-       return;
-   }
-   createUser(db, "admin", "admin", "admin", true);
-}
-
-bool login(sqlite3* db, string email, string password) {
-   string sql = "SELECT email FROM users WHERE email = '" + email + "' AND password = '" + password + "';";
-   sqlite3_stmt* stmt;
-   sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
-   int result = sqlite3_step(stmt);
-   sqlite3_finalize(stmt);
-   return result == SQLITE_ROW;
-}
-
-void getUserData(sqlite3* db, string email, string password, string& name, bool& isAdmin) {
-   string sql = "SELECT name, isAdmin FROM users WHERE email = '" + email + "' AND password = '" + password + "';";
-   sqlite3_stmt* stmt;
-   sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
-   sqlite3_step(stmt);
-   name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
-   isAdmin = sqlite3_column_int(stmt, 1);
-   sqlite3_finalize(stmt);
-}
-
-string generate_token(sqlite3*db, string username, string password,  string secretToken) {
-   bool isAdmin;
-   string name;
-   getUserData(db, username, password, name, isAdmin);
-   return jwt::create()
-       .set_issuer("StudentSync") 
-       .set_payload_claim("username", jwt::claim(username)) 
-       .set_payload_claim("role", jwt::claim(string(isAdmin ? "admin" : "user")))
-       .sign(jwt::algorithm::hs256(secretToken)); 
-}
-
-bool validate_token(string token, string secretToken) {
-   try {
-       auto decoded_token = jwt::decode(token);
-       auto verifier = jwt::verify().allow_algorithm(jwt::algorithm::hs256(secretToken)).with_issuer("StudentSync");
-       verifier.verify(decoded_token);
-       return true;  
-   } catch (const exception& e) {
-       return false; 
-   }
-}
-
-bool decodeToken(string token, string& username, bool& isAdmin) {
-   try {
-       auto decoded_token = jwt::decode(token);
-       username = decoded_token.get_payload_claim("username").as_string();
-       isAdmin = decoded_token.get_payload_claim("role").as_string() == "admin";
-       return true;  
-   } catch (const exception& e) {
-       return false; 
-   }
-}
-
-bool matchesIso8601(const string& date) {
-   const regex iso8601Regex(R"(^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d(:[0-5]\d(\.\d+)?([+-][0-2]\d:[0-5]\d|Z)?)?$)");
-
-   return regex_match(date, iso8601Regex);
-}
-void createEvent(sqlite3* db, string title, string description, string schedule_at) {
-   string sql = "INSERT INTO events (title, description, schedule_at) VALUES ('" + title + "', '" + description + "', '" + schedule_at + "');";
-   sqlite3_stmt* stmt;
-   sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
-   if (sqlite3_step(stmt) != SQLITE_DONE) {
-       throw(exception(sqlite3_errmsg(db)));
-   }
-   sqlite3_finalize(stmt);
-
-}
-
-void deleteEvent(sqlite3* db, int id) {
-   string sql = "DELETE FROM events WHERE id = " + to_string(id) + ";";
-   sqlite3_stmt* stmt;
-   sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
-   if (sqlite3_step(stmt) != SQLITE_DONE) {
-       throw(exception("Error deleting event"));
-   }
-}
-
+string generate_token(sqlite3*db, string username, string password,  string secretToken);
 // functon for fetching all tasks
-vector<vector<string>> getAllEvents(sqlite3* db){
-   vector<vector<string>> events;
-   string sqlQuery = "SELECT id, title, description, schedule_at FROM events;";
-   sqlite3_stmt* stmt;
-   vector<string> tempEvent;
-   sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
-   while (sqlite3_step(stmt) == SQLITE_ROW) {
-       tempEvent.clear();
-       tempEvent.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
-       tempEvent.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
-       tempEvent.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
-       tempEvent.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3))));
-       events.push_back(tempEvent);
-   }
-   return events;
-}
+vector<vector<string>> getAllEvents(sqlite3* db);
+vector<vector<string>> getAllSubjects(sqlite3* db);
+vector<vector<string>> getAllQuizes(sqlite3* db, int subject_id);
+vector<vector<string>> getAllAssignments(sqlite3* db, int subject_id);
+vector<vector<string>> getAllMids(sqlite3* db, int subject_id);
+vector<vector<string>> getAllFinals(sqlite3* db, int subject_id);
 
-vector<vector<string>> getAllSubjects(sqlite3* db){
-   vector<vector<string>> subjects;
-   string sqlQuery = "SELECT id, name, credits, quiz_weightage, assignment_weightage, mids_weightage, finals_weightage FROM subject;";
-   sqlite3_stmt* stmt;
-   vector<string> tempSubject;
-   sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
-   while (sqlite3_step(stmt) == SQLITE_ROW) {    
-       tempSubject.clear();
-       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
-       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
-       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
-       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3))));
-       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4))));
-       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5))));
-       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6))));
-       subjects.push_back(tempSubject);
-   }
-   return subjects;
-}
 
-vector<vector<string>> getAllQuizes(sqlite3* db, int subject_id){
-   vector<vector<string>> quizes;
-   string sqlQuery = "SELECT id, quiz_name, quiz_marks FROM quizes WHERE subject_id = " + to_string(subject_id) + ";";
-   sqlite3_stmt* stmt;
-   vector<string> tempQuiz;
-   sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
-   while (sqlite3_step(stmt) == SQLITE_ROW) {
-       tempQuiz.clear();
-       tempQuiz.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
-       tempQuiz.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
-       tempQuiz.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
-       quizes.push_back(tempQuiz);
-   }
-   return quizes;
-}
-
-vector<vector<string>> getAllAssignments(sqlite3* db, int subject_id){
-   vector<vector<string>> assignments;
-   string sqlQuery = "SELECT id, assignment_name, assignment_marks FROM assignments WHERE subject_id = " + to_string(subject_id) + ";";
-   sqlite3_stmt* stmt;
-   vector<string> tempAssignment;
-   sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
-   while (sqlite3_step(stmt) == SQLITE_ROW) {
-       tempAssignment.clear();
-       tempAssignment.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
-       tempAssignment.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
-       tempAssignment.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
-       assignments.push_back(tempAssignment);
-   }
-   return assignments;
-}
-
-vector<vector<string>> getAllMids(sqlite3* db, int subject_id){
-   vector<vector<string>> mids;
-   string sqlQuery = "SELECT id, mid_name, mid_marks FROM mids WHERE subject_id = " + to_string(subject_id) + ";";
-   sqlite3_stmt* stmt;
-   vector<string> tempMid;
-   sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
-   while (sqlite3_step(stmt) == SQLITE_ROW) {
-       tempMid.clear();
-       tempMid.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
-       tempMid.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
-       tempMid.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
-       mids.push_back(tempMid);
-   }
-   return mids;
-}
-
-vector<vector<string>> getAllFinals(sqlite3* db, int subject_id){
-   vector<vector<string>> finals;
-   string sqlQuery = "SELECT id, final_name, final_marks FROM finals WHERE subject_id = " + to_string(subject_id) + ";";
-   sqlite3_stmt* stmt;
-   vector<string> tempFinal;
-   sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
-   while (sqlite3_step(stmt) == SQLITE_ROW) {
-       tempFinal.clear();
-       tempFinal.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
-       tempFinal.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
-       tempFinal.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
-       finals.push_back(tempFinal);
-   }
-   return finals;
-}
 
 struct CORS {
    struct context {};
@@ -1071,3 +834,270 @@ int main(void){
 
 }
 
+bool studentMarksToFile(string userEmail, string assesmentType, string obtainedMarks, string subjectId, string subName, string assesmentId){
+    fstream file;
+    string filePath = "student_marks/" + subName + "_" + subjectId + ".csv";
+    file.open(filePath, ios::out | ios::app);
+    if (!file.is_open()) {
+        return false;
+    }
+    file << userEmail << "," << assesmentType << "," << assesmentId << "," << obtainedMarks << endl;
+    file.close();
+    return true;
+}
+
+int studentMarksFromFile(string userEmail, string assesmentType, int subjectId, string subName, int assesmentId){
+    fstream file;
+    string filePath = "student_marks/" + subName + "_" + to_string(subjectId) + ".csv";
+    file.open(filePath, ios::in);
+    if (!file.is_open()) {
+        return 0;
+    }
+    string line;
+    while (getline(file, line)) {
+        if (line.find(userEmail) != string::npos && line.find(assesmentType) != string::npos && line.find(to_string(assesmentId)) != string::npos) {
+            string marks = line.substr(line.find_last_of(",") + 1);
+            return stoi(marks);
+        }
+    }
+    return 0;
+}
+
+int executeSQL(sqlite3* db, const char* sql) {
+   char* errorMessage;
+   int exit = sqlite3_exec(db, sql, nullptr, 0, &errorMessage);
+
+   if (exit != SQLITE_OK) {
+       cout << "Error executing SQL: " << errorMessage << endl;
+       sqlite3_free(errorMessage);
+       return 1;
+   }
+   return 0;
+}
+
+bool checkUserExxisits(sqlite3* db, string email) {
+   string sql = "SELECT email FROM users WHERE email = '" + email + "';";
+   sqlite3_stmt* stmt;
+   sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+   int result = sqlite3_step(stmt);
+   sqlite3_finalize(stmt);
+   return result == SQLITE_ROW;
+}
+
+bool createUser(sqlite3* db, string email, string name, string password, bool isAdmin) {
+   if (checkUserExxisits(db, email)) {
+       cout << "User already exists" << endl;
+       return false; // return false if user already exists
+   }
+   string sql = "INSERT INTO users (email, name, password, isAdmin) VALUES ('" + email + "', '" + name + "', '" + password + "', " + to_string(isAdmin) + ");";
+   executeSQL(db, sql.c_str());
+   return true; // return true if user is created
+}
+
+bool deleteUser(sqlite3* db, string email) {
+   if (!checkUserExxisits(db, email)) {
+       cout << "User does not exist" << endl;
+       return false; // return false if user does not exist
+   }
+   string sql = "DELETE FROM users WHERE email = '" + email + "';";
+   executeSQL(db, sql.c_str());
+   return true; // return true if user is deleted
+}
+
+bool changePassword(sqlite3* db, string email, string newPassword) {
+   if (!checkUserExxisits(db, email)) {
+       cout << "User does not exist" << endl;
+       return false; // return false if user does not exist
+   }
+   string sql = "UPDATE users SET password = '" + newPassword + "' WHERE email = '" + email + "';";
+   executeSQL(db, sql.c_str());
+   return true; // return true if password is changed
+}
+
+void defaultAdminUser(sqlite3* db) {
+   if (checkUserExxisits(db, "admin")) {
+       return;
+   }
+   createUser(db, "admin", "admin", "admin", true);
+}
+
+bool login(sqlite3* db, string email, string password) {
+   string sql = "SELECT email FROM users WHERE email = '" + email + "' AND password = '" + password + "';";
+   sqlite3_stmt* stmt;
+   sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+   int result = sqlite3_step(stmt);
+   sqlite3_finalize(stmt);
+   return result == SQLITE_ROW;
+}
+
+void getUserData(sqlite3* db, string email, string password, string& name, bool& isAdmin) {
+   string sql = "SELECT name, isAdmin FROM users WHERE email = '" + email + "' AND password = '" + password + "';";
+   sqlite3_stmt* stmt;
+   sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+   sqlite3_step(stmt);
+   name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+   isAdmin = sqlite3_column_int(stmt, 1);
+   sqlite3_finalize(stmt);
+}
+
+string generate_token(sqlite3*db, string username, string password,  string secretToken) {
+   bool isAdmin;
+   string name;
+   getUserData(db, username, password, name, isAdmin);
+   return jwt::create()
+       .set_issuer("StudentSync") 
+       .set_payload_claim("username", jwt::claim(username)) 
+       .set_payload_claim("role", jwt::claim(string(isAdmin ? "admin" : "user")))
+       .sign(jwt::algorithm::hs256(secretToken)); 
+}
+
+bool validate_token(string token, string secretToken) {
+   try {
+       auto decoded_token = jwt::decode(token);
+       auto verifier = jwt::verify().allow_algorithm(jwt::algorithm::hs256(secretToken)).with_issuer("StudentSync");
+       verifier.verify(decoded_token);
+       return true;  
+   } catch (const exception& e) {
+       return false; 
+   }
+}
+
+bool decodeToken(string token, string& username, bool& isAdmin) {
+   try {
+       auto decoded_token = jwt::decode(token);
+       username = decoded_token.get_payload_claim("username").as_string();
+       isAdmin = decoded_token.get_payload_claim("role").as_string() == "admin";
+       return true;  
+   } catch (const exception& e) {
+       return false; 
+   }
+}
+
+bool matchesIso8601(const string& date) {
+   const regex iso8601Regex(R"(^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d(:[0-5]\d(\.\d+)?([+-][0-2]\d:[0-5]\d|Z)?)?$)");
+
+   return regex_match(date, iso8601Regex);
+}
+
+void createEvent(sqlite3* db, string title, string description, string schedule_at) {
+   string sql = "INSERT INTO events (title, description, schedule_at) VALUES ('" + title + "', '" + description + "', '" + schedule_at + "');";
+   sqlite3_stmt* stmt;
+   sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+   if (sqlite3_step(stmt) != SQLITE_DONE) {
+       throw(exception(sqlite3_errmsg(db)));
+   }
+   sqlite3_finalize(stmt);
+
+}
+
+void deleteEvent(sqlite3* db, int id) {
+   string sql = "DELETE FROM events WHERE id = " + to_string(id) + ";";
+   sqlite3_stmt* stmt;
+   sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+   if (sqlite3_step(stmt) != SQLITE_DONE) {
+       throw(exception("Error deleting event"));
+   }
+}
+
+vector<vector<string>> getAllEvents(sqlite3* db){
+   vector<vector<string>> events;
+   string sqlQuery = "SELECT id, title, description, schedule_at FROM events;";
+   sqlite3_stmt* stmt;
+   vector<string> tempEvent;
+   sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+   while (sqlite3_step(stmt) == SQLITE_ROW) {
+       tempEvent.clear();
+       tempEvent.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+       tempEvent.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+       tempEvent.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+       tempEvent.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3))));
+       events.push_back(tempEvent);
+   }
+   return events;
+}
+
+
+vector<vector<string>> getAllSubjects(sqlite3* db){
+   vector<vector<string>> subjects;
+   string sqlQuery = "SELECT id, name, credits, quiz_weightage, assignment_weightage, mids_weightage, finals_weightage FROM subject;";
+   sqlite3_stmt* stmt;
+   vector<string> tempSubject;
+   sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+   while (sqlite3_step(stmt) == SQLITE_ROW) {    
+       tempSubject.clear();
+       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3))));
+       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4))));
+       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5))));
+       tempSubject.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6))));
+       subjects.push_back(tempSubject);
+   }
+   return subjects;
+}
+
+vector<vector<string>> getAllQuizes(sqlite3* db, int subject_id){
+   vector<vector<string>> quizes;
+   string sqlQuery = "SELECT id, quiz_name, quiz_marks FROM quizes WHERE subject_id = " + to_string(subject_id) + ";";
+   sqlite3_stmt* stmt;
+   vector<string> tempQuiz;
+   sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+   while (sqlite3_step(stmt) == SQLITE_ROW) {
+       tempQuiz.clear();
+       tempQuiz.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+       tempQuiz.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+       tempQuiz.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+       quizes.push_back(tempQuiz);
+   }
+   return quizes;
+}
+
+vector<vector<string>> getAllAssignments(sqlite3* db, int subject_id){
+   vector<vector<string>> assignments;
+   string sqlQuery = "SELECT id, assignment_name, assignment_marks FROM assignments WHERE subject_id = " + to_string(subject_id) + ";";
+   sqlite3_stmt* stmt;
+   vector<string> tempAssignment;
+   sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+   while (sqlite3_step(stmt) == SQLITE_ROW) {
+       tempAssignment.clear();
+       tempAssignment.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+       tempAssignment.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+       tempAssignment.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+       assignments.push_back(tempAssignment);
+   }
+   return assignments;
+}
+
+vector<vector<string>> getAllMids(sqlite3* db, int subject_id){
+   vector<vector<string>> mids;
+   string sqlQuery = "SELECT id, mid_name, mid_marks FROM mids WHERE subject_id = " + to_string(subject_id) + ";";
+   sqlite3_stmt* stmt;
+   vector<string> tempMid;
+   sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+   while (sqlite3_step(stmt) == SQLITE_ROW) {
+       tempMid.clear();
+       tempMid.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+       tempMid.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+       tempMid.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+       mids.push_back(tempMid);
+   }
+   return mids;
+}
+
+
+vector<vector<string>> getAllFinals(sqlite3* db, int subject_id){
+   vector<vector<string>> finals;
+   string sqlQuery = "SELECT id, final_name, final_marks FROM finals WHERE subject_id = " + to_string(subject_id) + ";";
+   sqlite3_stmt* stmt;
+   vector<string> tempFinal;
+   sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
+   while (sqlite3_step(stmt) == SQLITE_ROW) {
+       tempFinal.clear();
+       tempFinal.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+       tempFinal.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+       tempFinal.push_back(string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+       finals.push_back(tempFinal);
+   }
+   return finals;
+}
