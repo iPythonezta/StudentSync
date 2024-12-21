@@ -4,6 +4,7 @@
 #include <jwt-cpp/jwt.h>
 #include <vector>
 #include <regex>
+#include <cctype>
 
 using namespace std;
 const string secretToken = "e6a76430104f92883b23e707051da61c56172e9276d7b90378b0942d022d4646";
@@ -212,6 +213,7 @@ int main(void){
            return crow::response(400, "Invalid JSON");
        }
 
+       email = toLowerCase(email); // Convert email to lowercase
        bool userCreated = createUser(db, email, name, password, isAdmin);
        if (userCreated) {
            crow::json::wvalue response;
@@ -242,6 +244,7 @@ int main(void){
            return crow::response(400, "Invalid JSON");
        }
 
+       email = toLowerCase(email); // Convert email to lowercase
        if (login(db, email, password)) {
            crow::json::wvalue response;
            response["token"] = generate_token(db, email, password, secretToken);
@@ -809,23 +812,33 @@ int main(void){
                 data[i]["task_id"].s()
             );
        }
+       // Aggregate calculation
+       double totalMarksObtained = 0.0;
+       double totalMarks = 0.0;
 
+       for (size_t i = 0; i < data.size(); i++) {
+           try {
+               // Extract marks and total_marks from the current JSON object
+               double marksObtained = stod(data[i]["marks"].s());
+               double totalMarksForItem = stod(data[i]["total_marks"].s());
 
-       // ayo Asim, complete the code to calculate the aggregate
-       // data is your input and it would look something like this (it is an array of json objects in simple words)
-       // [{"type":"quiz","name":"Quiz 1","marks":"10","total_marks":"10"},{"type":"assignment","name":"Assignment 01","marks":"15","total_marks":"20"}]
-       // to access the 1st element you can use like data[0]
-       // it will give you something like this {"type":"quiz","name":"Quiz 1","marks":"10","total_marks":"10"}
-       // to access the type you can use data[0]["type"].s() which will give you "quiz"
-       // to access the marks you can use data[0]["marks"].s() which will give you "10"
+               // Add to totals
+               totalMarksObtained += marksObtained;
+               totalMarks += totalMarksForItem;
+           }
+           catch (const exception& e) {
+               return crow::response(400, "Invalid marks or total_marks format in one or more items.");
+           }
+       }
 
-       // now your task is to calculate the aggregate and return it in the response
-       // data.size() will give you the number of elements in the data array (similar to data.length() for arrays)
+       // Calculate aggregate percentage
+       double aggregate = (totalMarks > 0) ? (totalMarksObtained / totalMarks) * 100 : 0.0;
+
+       // Prepare response
        crow::json::wvalue response;
-       response["aggregate"] = 0; // replace 0 with the calculated aggregate
+       response["aggregate"] = aggregate;
        return crow::response(200, response);
-
-   });
+       });
 
 
    studentSync.port(2028).run();
@@ -873,23 +886,34 @@ int executeSQL(sqlite3* db, const char* sql) {
    return 0;
 }
 
+// Function to convert a string to lowercase
+string toLowerCase(const string& input) {
+    string lowerCaseInput = input; // Create a copy of the input string
+    for (size_t i = 0; i < lowerCaseInput.length(); i++) {
+        lowerCaseInput[i] = tolower(lowerCaseInput[i]); // Convert each character to lowercase
+    }
+    return lowerCaseInput;
+}
+
 bool checkUserExxisits(sqlite3* db, string email) {
-   string sql = "SELECT email FROM users WHERE email = '" + email + "';";
-   sqlite3_stmt* stmt;
-   sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
-   int result = sqlite3_step(stmt);
-   sqlite3_finalize(stmt);
-   return result == SQLITE_ROW;
+    email = toLowerCase(email); // Convert email to lowercase
+    string sql = "SELECT email FROM users WHERE email = '" + email + "';";
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    int result = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return result == SQLITE_ROW;
 }
 
 bool createUser(sqlite3* db, string email, string name, string password, bool isAdmin) {
-   if (checkUserExxisits(db, email)) {
-       cout << "User already exists" << endl;
-       return false; // return false if user already exists
-   }
-   string sql = "INSERT INTO users (email, name, password, isAdmin) VALUES ('" + email + "', '" + name + "', '" + password + "', " + to_string(isAdmin) + ");";
-   executeSQL(db, sql.c_str());
-   return true; // return true if user is created
+    if (checkUserExxisits(db, email)) {
+        cout << "User already exists" << endl;
+        return false; // return false if user already exists
+    }
+    string newemail = toLowerCase(email); // Convert email to lowercase
+    string sql = "INSERT INTO users (email, name, password, isAdmin) VALUES ('" + newemail + "', '" + name + "', '" + password + "', " + (isAdmin ? "1" : "0") + ");";
+    executeSQL(db, sql.c_str());
+    return true; // return true if user is created
 }
 
 bool deleteUser(sqlite3* db, string email) {
@@ -929,6 +953,7 @@ bool login(sqlite3* db, string email, string password) {
 }
 
 void getUserData(sqlite3* db, string email, string password, string& name, bool& isAdmin) {
+   email = toLowerCase(email); // Convert email to lowercase
    string sql = "SELECT name, isAdmin FROM users WHERE email = '" + email + "' AND password = '" + password + "';";
    sqlite3_stmt* stmt;
    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
