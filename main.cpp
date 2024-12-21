@@ -35,8 +35,6 @@ vector<vector<string>> getAllAssignments(sqlite3* db, int subject_id);
 vector<vector<string>> getAllMids(sqlite3* db, int subject_id);
 vector<vector<string>> getAllFinals(sqlite3* db, int subject_id);
 
-
-
 struct CORS {
    struct context {};
 
