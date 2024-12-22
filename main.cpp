@@ -82,9 +82,9 @@ void appendCSV(const string& filename, const Question& Question) {
 
 
 void addQuestion(unordered_map<string, vector<Question>>& subjectMap, const string& subject, int id, const string& question, const string& answer) {
-    Question newQuestion = {id, question, answer};
+    Question newQuestion = { id, question, answer };
     subjectMap[subject].push_back(newQuestion);
-    appendCSV("quizes/"+subject + ".csv", newQuestion);
+    appendCSV("quizes/" + subject + ".csv", newQuestion);
 }
 
 void deleteRow(vector<Question>& Questions, int delete_index) {
@@ -1043,20 +1043,20 @@ int main(void) {
             {"finalAggregate", finalAggregate}
         };
         return crow::response(200, response);
-    });
+            });
 
 
 
     CROW_ROUTE(studentSync, "/api/quiz/")
-    .methods("GET"_method, "POST"_method, "DELETE"_method)
-    ([db](const crow::request& req) {
+        .methods("GET"_method, "POST"_method, "DELETE"_method)
+        ([db](const crow::request& req) {
 
         unordered_map<string, vector<Question>> subjectMap;
         vector<string> subjects;
         string sql = "SELECT name FROM subject";
         sqlite3_stmt* stmt;
         sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
-        while(sqlite3_step(stmt) == SQLITE_ROW) {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
             subjects.push_back(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
             subjectMap[reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))] = vector<Question>();
         }
@@ -1069,7 +1069,7 @@ int main(void) {
             for (const auto& subject : subjects) {
                 result[subject] = displayData(subjectMap[subject]);
             }
-            return crow::response{result};
+            return crow::response{ result };
         }
 
         // Handle POST request: Add new Question
@@ -1079,7 +1079,7 @@ int main(void) {
             string question = x["question"].s();
             string answer = x["answer"].s();
             addQuestion(subjectMap, subject, id, question, answer);
-            return crow::response{"Question added successfully"};
+            return crow::response{ "Question added successfully" };
         }
 
         // Handle DELETE request: Delete Question
@@ -1087,12 +1087,12 @@ int main(void) {
             string subject = x["subject"].s();
             int delete_index = x["id"].i() - 1;
             deleteRow(subjectMap[subject], delete_index);
-            writeCSV("quizes/"+subject + ".csv", subjectMap[subject]);
-            return crow::response{"Question deleted successfully"};
+            writeCSV("quizes/" + subject + ".csv", subjectMap[subject]);
+            return crow::response{ "Question deleted successfully" };
         }
 
-        return crow::response{400}; // Bad request if method not handled
-    });
+        return crow::response{ 400 }; // Bad request if method not handled
+            });
 
     studentSync.port(2028).run();
 
