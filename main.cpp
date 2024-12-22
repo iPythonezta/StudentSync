@@ -785,6 +785,51 @@ int main(void) {
         }
             });
 
+    CROW_ROUTE(studentSync, "/api/change-password/")
+        .methods("POST"_method)
+        ([db](const crow::request& request) {
+        string email, oldPassword, newPassword;
+
+        // Validating the Authorization Token
+        string auth_header = string(request.get_header_value("Authorization")).replace(0, 7, ""); // Remove "Bearer "
+        if (auth_header.empty() || !validate_token(auth_header, secretToken)) {
+            return crow::response(401, "Authorization token is missing or invalid");
+        }
+
+        // Decode Token to Retrieve User Email
+        bool isAdmin;
+        if (!decodeToken(auth_header, email, isAdmin)) {
+            return crow::response(401, "Failed to decode token");
+        }
+
+        // Parsing the JSON Request
+        auto json_data = crow::json::load(request.body);
+        if (!json_data) {
+            return crow::response(400, "Invalid JSON");
+        }
+
+        try {
+            oldPassword = json_data["oldPassword"].s();
+            newPassword = json_data["newPassword"].s();
+        }
+        catch (const exception& e) {
+            return crow::response(400, "Invalid JSON structure");
+        }
+
+        // Verifying Old Password
+        if (!login(db, email, oldPassword)) {
+            return crow::response(401, "Incorrect old password");
+        }
+
+        // Updating Password Using `changePassword`
+        if (!changePassword(db, email, newPassword)) {
+            return crow::response(500, "Failed to update password");
+        }
+
+        return crow::response(200, "Password updated successfully");
+            });
+
+
     CROW_ROUTE(studentSync, "/api/calculate-aggregate/")
         .methods("POST"_method)
         ([db](const crow::request& request) {
