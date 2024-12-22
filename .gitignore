@@ -35,4 +35,5 @@ x64/
 !static/**/*
 !frontend/build/
 !student_marks/*
+!quizes/*
 frontend/node_modules/

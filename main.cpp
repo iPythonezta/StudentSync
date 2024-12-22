@@ -1067,6 +1067,7 @@ int main(void) {
         if (req.method == "GET"_method) {
             crow::json::wvalue result;
             for (const auto& subject : subjects) {
+                subjectMap[subject] = readCSV("quizes/" + subject + ".csv");
                 result[subject] = displayData(subjectMap[subject]);
             }
             return crow::response{ result };
