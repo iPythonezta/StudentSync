@@ -850,7 +850,7 @@ int main(void) {
         double totalFinalMarksObtained = 0.0, totalFinalMarks = 0.0;
 
         // Categorize marks by type and calculate totals
-        for (size_t i = 0; i < data.size(); i++) {
+        for (int i = 0; i < data.size(); i++) {
             try {
                 double marks_;
                 try {
@@ -872,7 +872,7 @@ int main(void) {
                     totalAssignmentMarksObtained += marksObtained;
                     totalAssignmentMarks += totalMarksForItem;
                 }
-                else if (type == "mids") {
+                else if (type == "mid") {
                     int midMarksFromCSV = studentMarksFromFile(
                         username,
                         "mid",
@@ -883,7 +883,7 @@ int main(void) {
                     totalMidMarksObtained += midMarksFromCSV;
                     totalMidMarks += totalMarksForItem;
                 }
-                else if (type == "finals") {
+                else if (type == "final") {
                     int finalMarksFromCSV = studentMarksFromFile(
                         username,
                         "final",
