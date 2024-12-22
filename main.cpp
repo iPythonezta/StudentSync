@@ -880,6 +880,10 @@ int main(void) {
                         data[i]["subject_name"].s(),
                         stoi(data[i]["task_id"].s())
                     );
+                    totalMidMarksObtained += midMarksFromCSV;
+                    totalMidMarks += totalMarksForItem;
+                }
+                else if (type == "finals") {
                     int finalMarksFromCSV = studentMarksFromFile(
                         username,
                         "final",
@@ -889,11 +893,7 @@ int main(void) {
                     );
                     totalFinalMarksObtained += finalMarksFromCSV;
                     totalFinalMarks += totalMarksForItem;
-                }
-                else if (type == "finals") {
-                    totalFinalMarksObtained += marksObtained;
-                    totalFinalMarks += totalMarksForItem;
-                }
+                };
             }
             catch (const exception& e) {
                 cout << e.what() << endl;
