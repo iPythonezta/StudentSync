@@ -6,9 +6,16 @@
 #include <regex>
 #include <cctype>
 #include <sstream>
+#include <unordered_map>
 
 using namespace std;
 const string secretToken = "e6a76430104f92883b23e707051da61c56172e9276d7b90378b0942d022d4646";
+
+struct Question {
+    int id;
+    string question;
+    string answer;
+};
 
 void defaultAdminUser(sqlite3* db);
 void getUserData(sqlite3* db, string email, string password, string& name, bool& isAdmin);
@@ -37,6 +44,78 @@ vector<vector<string>> getAllAssignments(sqlite3* db, int subject_id);
 vector<vector<string>> getAllMids(sqlite3* db, int subject_id);
 vector<vector<string>> getAllFinals(sqlite3* db, int subject_id);
 
+
+vector<Question> readCSV(const string& filename) {
+    ifstream file(filename);
+    string line;
+    vector<Question> Questions;
+
+    // Skip the header line
+    getline(file, line);
+
+    while (getline(file, line)) {
+        int commaPos1 = line.find(',');
+        int commaPos2 = line.rfind(',');
+        if (commaPos1 != string::npos && commaPos2 != string::npos && commaPos1 != commaPos2) {
+            Question Question;
+            Question.id = stoi(line.substr(0, commaPos1));
+            Question.question = line.substr(commaPos1 + 1, commaPos2 - commaPos1 - 1);
+            Question.answer = line.substr(commaPos2 + 1);
+            Questions.push_back(Question);
+        }
+    }
+    return Questions;
+}
+
+void writeCSV(const string& filename, const vector<Question>& Questions) {
+    ofstream file(filename);
+    file << "ID,Question,Answer\n"; // Write header
+    for (const auto& Question : Questions) {
+        file << Question.id << "," << Question.question << "," << Question.answer << "\n";
+    }
+}
+
+void appendCSV(const string& filename, const Question& Question) {
+    ofstream file(filename, ios::app);
+    file << Question.id << "," << Question.question << "," << Question.answer << "\n";
+}
+
+
+void addQuestion(unordered_map<string, vector<Question>>& subjectMap, const string& subject, int id, const string& question, const string& answer) {
+    Question newQuestion = { id, question, answer };
+    subjectMap[subject].push_back(newQuestion);
+    appendCSV("quizes/" + subject + ".csv", newQuestion);
+}
+
+void deleteRow(vector<Question>& Questions, int delete_index) {
+    if (delete_index >= 0 && delete_index < Questions.size()) {
+        Questions.erase(Questions.begin() + delete_index);
+        // Adjust the IDs to be sequential
+        for (int i = delete_index; i < Questions.size(); ++i) {
+            Questions[i].id = i + 1;
+        }
+    }
+}
+
+string displayData(const vector<Question>& Questions) {
+    string result = "ID,Question,Answer\n";
+    for (const auto& Question : Questions) {
+        result += to_string(Question.id) + "," + Question.question + "," + Question.answer + "\n";
+    }
+    return result;
+}
+
+string readFile(const string& filename) {
+    ifstream file(filename);
+    if (!file.is_open()) {
+        cerr << "Error: Cannot open file " << filename << endl;
+        return "";
+    }
+    string content((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
+    return content;
+}
+
+
 struct CORS {
     struct context {};
 
@@ -58,7 +137,6 @@ struct CORS {
         res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     }
 };
-
 
 int main(void) {
     sqlite3* db;
@@ -413,7 +491,7 @@ int main(void) {
 
             auto json_data = crow::json::load(request.body);
             if (!json_data) {
-                cout << "Invalid JSON" << endl;
+                // cout << "Invalid JSON" << endl;
                 return crow::response(400, "Invalid JSON");
             }
 
@@ -426,7 +504,7 @@ int main(void) {
                 description = json_data["description"].s();
             }
             catch (const exception& e) {
-                cout << e.what() << endl;
+                // cout << e.what() << endl;
                 return crow::response(400, "Invalid JSON");
             }
             try {
@@ -438,7 +516,7 @@ int main(void) {
                 return crow::response(200, response);
             }
             catch (const exception& e) {
-                cout << e.what() << endl;
+                // cout << e.what() << endl;
                 return crow::response(400, "Event creation failed");
             }
         }
@@ -941,7 +1019,7 @@ int main(void) {
                 };
             }
             catch (const exception& e) {
-                cout << e.what() << endl;
+                // cout << e.what() << endl;
                 return crow::response(400, "Invalid marks or total_marks format in one or more items.");
             }
         }
@@ -967,6 +1045,55 @@ int main(void) {
         return crow::response(200, response);
             });
 
+
+
+    CROW_ROUTE(studentSync, "/api/quiz/")
+        .methods("GET"_method, "POST"_method, "DELETE"_method)
+        ([db](const crow::request& req) {
+
+        unordered_map<string, vector<Question>> subjectMap;
+        vector<string> subjects;
+        string sql = "SELECT name FROM subject";
+        sqlite3_stmt* stmt;
+        sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            subjects.push_back(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+            subjectMap[reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))] = vector<Question>();
+        }
+
+        auto x = crow::json::load(req.body);
+
+        // Handle GET request: Display data for all subjects
+        if (req.method == "GET"_method) {
+            crow::json::wvalue result;
+            for (const auto& subject : subjects) {
+                result[subject] = displayData(subjectMap[subject]);
+            }
+            return crow::response{ result };
+        }
+
+        // Handle POST request: Add new Question
+        if (req.method == "POST"_method && x.has("subject") && x.has("question") && x.has("answer")) {
+            string subject = x["subject"].s();
+            int id = subjectMap[subject].size() + 1;
+            string question = x["question"].s();
+            string answer = x["answer"].s();
+            addQuestion(subjectMap, subject, id, question, answer);
+            return crow::response{ "Question added successfully" };
+        }
+
+        // Handle DELETE request: Delete Question
+        if (req.method == "DELETE"_method && x.has("subject") && x.has("id")) {
+            string subject = x["subject"].s();
+            int delete_index = x["id"].i() - 1;
+            deleteRow(subjectMap[subject], delete_index);
+            writeCSV("quizes/" + subject + ".csv", subjectMap[subject]);
+            return crow::response{ "Question deleted successfully" };
+        }
+
+        return crow::response{ 400 }; // Bad request if method not handled
+            });
+
     studentSync.port(2028).run();
 
 }
@@ -986,7 +1113,7 @@ bool studentMarksToFile(string userEmail, string assesmentType, string obtainedM
     // Read all lines from the file
     while (getline(file, line)) {
         data.push_back(line);
-        cout << line << endl;
+        // cout << line << endl;
     }
     file.close(); // Close after reading
 
@@ -998,7 +1125,7 @@ bool studentMarksToFile(string userEmail, string assesmentType, string obtainedM
             data[i] = userEmail + "," + assesmentType + "," + assesmentId + "," + obtainedMarks;
             done = true;
         }
-        cout << data[i] << endl;
+        // cout << data[i] << endl;
         file << data[i] << endl;
     }
 
