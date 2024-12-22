@@ -50,9 +50,6 @@ vector<Question> readCSV(const string& filename) {
     string line;
     vector<Question> Questions;
 
-    // Skip the header line
-    getline(file, line);
-
     while (getline(file, line)) {
         int commaPos1 = line.find(',');
         int commaPos2 = line.rfind(',');
@@ -69,7 +66,6 @@ vector<Question> readCSV(const string& filename) {
 
 void writeCSV(const string& filename, const vector<Question>& Questions) {
     ofstream file(filename);
-    file << "ID,Question,Answer\n"; // Write header
     for (const auto& Question : Questions) {
         file << Question.id << "," << Question.question << "," << Question.answer << "\n";
     }
@@ -1053,21 +1049,23 @@ int main(void) {
 
         unordered_map<string, vector<Question>> subjectMap;
         vector<string> subjects;
+        string subject;
         string sql = "SELECT name FROM subject";
         sqlite3_stmt* stmt;
         sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
         while (sqlite3_step(stmt) == SQLITE_ROW) {
-            subjects.push_back(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
-            subjectMap[reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))] = vector<Question>();
+            subject = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+            subjects.push_back(subject);
+            subjectMap[subject] =readCSV("quizes/" + subject + ".csv");
         }
-
+        sqlite3_finalize(stmt);
         auto x = crow::json::load(req.body);
 
         // Handle GET request: Display data for all subjects
         if (req.method == "GET"_method) {
             crow::json::wvalue result;
             for (const auto& subject : subjects) {
-                subjectMap[subject] = readCSV("quizes/" + subject + ".csv");
+                
                 result[subject] = displayData(subjectMap[subject]);
             }
             return crow::response{ result };
@@ -1093,7 +1091,7 @@ int main(void) {
         }
 
         return crow::response{ 400 }; // Bad request if method not handled
-            });
+    });
 
     studentSync.port(2028).run();
 
