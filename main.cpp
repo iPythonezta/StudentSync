@@ -118,7 +118,7 @@ struct CORS {
     void before_handle(crow::request& req, crow::response& res, context&) {
         // Handle Preflight Requests (OPTIONS method)
         if (req.method == crow::HTTPMethod::OPTIONS) {
-            res.add_header("Access-Control-Allow-Origin", "http://localhost:3000"); // Allowed origin
+            res.add_header("Access-Control-Allow-Origin", "https://6ff5-154-192-47-80.ngrok-free.app"); // Allowed origin
             res.add_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
             res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
             res.code = 204; // No Content
@@ -128,7 +128,7 @@ struct CORS {
 
     void after_handle(crow::request&, crow::response& res, context&) {
         // Add CORS headers to all responses
-        res.add_header("Access-Control-Allow-Origin", "http://localhost:3000");
+        res.add_header("Access-Control-Allow-Origin", "https://6ff5-154-192-47-80.ngrok-free.app");
         res.add_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     }
@@ -1093,7 +1093,7 @@ int main(void) {
         return crow::response{ 400 }; // Bad request if method not handled
     });
 
-    studentSync.port(2028).run();
+    studentSync.port(2028).multithreaded().run();
 
 }
 bool studentMarksToFile(string userEmail, string assesmentType, string obtainedMarks, string subjectId, string subName, string assesmentId) {
