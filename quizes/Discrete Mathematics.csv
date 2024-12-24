@@ -1,0 +1,11 @@
+1,"What is the sum of the first 10 positive integers?","55"  
+2,"Prove that for any integer n, n² is congruent to 0 or 1 modulo 4.","True"  
+3,"What is the cardinality of the set {2 4 6 8 10}?","5"  
+4,"How many ways can you arrange the letters in the word 'MATH'?","24"  
+5,"What is the greatest common divisor (GCD) of 48 and 180?","12"  
+6,"Define a complete graph. How many edges does a complete graph with n vertices have?","A complete graph K_n has n(n-1)/2 edges."  
+7,"Is the set of all even integers a countable set?","Yes, it is countable."  
+8,"If A = {1 2 3} and B = {3 4 5} what is A ∩ B?","{3}"  
+9,"What is the number of subsets of a set containing 4 elements?","16"  
+10,"What is a bipartite graph?","A graph that can be divided into two disjoint sets such that every edge connects a vertex in one set to a vertex in the other."11,test,test
+11,test,test
