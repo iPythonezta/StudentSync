@@ -7,6 +7,7 @@
 #include <cctype>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 
 using namespace std;
 const string secretToken = "e6a76430104f92883b23e707051da61c56172e9276d7b90378b0942d022d4646";
@@ -21,6 +22,12 @@ void defaultAdminUser(sqlite3* db);
 void getUserData(sqlite3* db, string email, string password, string& name, bool& isAdmin);
 void createEvent(sqlite3* db, string title, string description, string schedule_at);
 void deleteEvent(sqlite3* db, int id);
+
+void addSession(string sessionName, int groupMembers, string status);
+void deleteSession(int id);
+void updateSessionStatus(int id, string status);
+vector<vector<string>> readSessions();
+
 string toLowerCase(const string& input);
 bool studentMarksToFile(string userEmail, string assesmentType, string obtainedMarks, string subjectId, string subName, string assesmentId);
 bool checkUserExxisits(sqlite3* db, string email);
@@ -112,13 +119,201 @@ string readFile(const string& filename) {
 }
 
 
+void TakePreferences(const string& filename, const string& mail, const vector<string>& preferences) {
+    ofstream Outfile(filename, ios::app); // Open the file in append mode
+
+    if (!Outfile.is_open()) {
+        cerr << "Error: Could not open the file." << endl;
+        return;
+    }
+
+    Outfile << mail << ",";
+    for (const auto& pref : preferences) {
+        Outfile << pref << ",";
+    }
+    Outfile << "\n";
+
+    Outfile.close(); // Close the file
+}
+
+bool preferenceAlreadyGiven(const string& filename, const string& mail) {
+    ifstream Infile(filename);
+    string line;
+    while (getline(Infile, line)) {
+        line = toLowerCase(line);
+        line = line.substr(0, line.find(','));
+        if (line.find(mail) != string::npos) {
+            Infile.close();
+            return true;
+        }
+    }
+    Infile.close();
+    return false;
+}
+
+bool CheckPerson(const string& filename, const string& person1, const string& person2) {
+    ifstream Infile(filename);
+
+    if (!Infile.is_open()) {
+        cerr << "Error: Could not open the file." << endl;
+        return false;
+    }
+
+    string line;
+    while (getline(Infile, line)) {
+        stringstream ss(line);
+        string mail;
+        getline(ss, mail, ',');
+
+        if (mail == person2) {
+            string item;
+            while (getline(ss, item, ',')) {
+                if (item == person1) {
+                    Infile.close();
+                    return true;
+                }
+            }
+        }
+    }
+
+    Infile.close();
+    return false;
+}
+
+// Function to remove only the matched lines from the CSV
+void RemoveMatchedLines(const string& filename, const unordered_set<string>& mailsToKeep) {
+    ifstream infile(filename);
+    if (!infile.is_open()) {
+        cerr << "Error: Could not open the file." << endl;
+        return;
+    }
+
+    string tempFilename = "temp.csv";
+    ofstream outfile(tempFilename);
+    if (!outfile.is_open()) {
+        cerr << "Error: Could not open the temporary file." << endl;
+        return;
+    }
+
+    string line;
+    while (getline(infile, line)) {
+        stringstream ss(line);
+        string mail;
+        getline(ss, mail, ',');
+
+        if (mailsToKeep.find(mail) == mailsToKeep.end()) {
+            outfile << line << endl;
+        }
+    }
+
+    infile.close();
+    outfile.close();
+
+    // Replace the original file with the temporary file
+    if (remove(filename.c_str()) != 0) {
+        cerr << "Error: Could not delete the original file." << endl;
+        return;
+    }
+    if (rename(tempFilename.c_str(), filename.c_str()) != 0) {
+        cerr << "Error: Could not rename the temporary file." << endl;
+    }
+    else {
+        cout << "Matched lines removed successfully." << endl;
+    }
+}
+void FormGroup(const string& filename1, const string& filename2, int groupSize) {
+    ifstream Infile(filename1);
+    if (!Infile.is_open()) {
+        cerr << "Error: Could not open the file." << endl;
+        return;
+    }
+
+    vector<string> group;
+    unordered_set<string> visited;
+    unordered_set<string> mailsToKeep;
+    vector<string> ungrouped; // List to store ungrouped users
+
+    string line;
+    while (getline(Infile, line)) {
+        stringstream ss(line);
+        string item;
+        getline(ss, item, ',');
+
+        if (visited.find(item) != visited.end()) {
+            continue; // Skip already grouped users
+        }
+
+        group.push_back(item);
+        visited.insert(item);
+
+        while (getline(ss, item, ',')) {
+            if (visited.find(item) == visited.end() && CheckPerson(filename1, group[0], item)) {
+                group.push_back(item);
+                visited.insert(item);
+
+                if (group.size() == groupSize) {
+                    break;
+                }
+            }
+        }
+
+        // Write the group if it meets the required size
+        if (group.size() == groupSize) {
+            ofstream Outfile(filename2, ios::app);
+            if (Outfile.is_open()) {
+                for (const auto& member : group) {
+                    Outfile << member << ",";
+                    mailsToKeep.insert(member);
+                }
+                Outfile << "\n";
+                Outfile.close();
+            } else {
+                cerr << "Error: Could not open the output file." << endl;
+            }
+            group.clear();
+        } else {
+            // If not enough members, add to ungrouped
+            ungrouped.insert(ungrouped.end(), group.begin(), group.end());
+            group.clear();
+        }
+    }
+
+    Infile.close();
+
+    // Handle leftover ungrouped users
+    if (!ungrouped.empty()) {
+        ofstream Outfile(filename2, ios::app);
+        if (Outfile.is_open()) {
+            for (size_t i = 0; i < ungrouped.size(); ++i) {
+                Outfile << ungrouped[i] << ",";
+                mailsToKeep.insert(ungrouped[i]);
+
+                // Write a new line when group size is reached
+                if ((i + 1) % groupSize == 0) {
+                    Outfile << "\n";
+                }
+            }
+            // Handle any remaining users
+            if (ungrouped.size() % groupSize != 0) {
+                Outfile << "\n";
+            }
+            Outfile.close();
+        } else {
+            cerr << "Error: Could not open the output file for leftovers." << endl;
+        }
+    }
+
+    // Remove processed entries
+    RemoveMatchedLines(filename1, mailsToKeep);
+}
+
 struct CORS {
     struct context {};
 
     void before_handle(crow::request& req, crow::response& res, context&) {
         // Handle Preflight Requests (OPTIONS method)
         if (req.method == crow::HTTPMethod::OPTIONS) {
-            res.add_header("Access-Control-Allow-Origin", "https://6ff5-154-192-47-80.ngrok-free.app"); // Allowed origin
+            res.add_header("Access-Control-Allow-Origin", "http://localhost:3000"); // Allowed origin
             res.add_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
             res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
             res.code = 204; // No Content
@@ -128,7 +323,7 @@ struct CORS {
 
     void after_handle(crow::request&, crow::response& res, context&) {
         // Add CORS headers to all responses
-        res.add_header("Access-Control-Allow-Origin", "https://6ff5-154-192-47-80.ngrok-free.app");
+        res.add_header("Access-Control-Allow-Origin", "http://localhost:3000");
         res.add_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     }
@@ -369,7 +564,7 @@ int main(void) {
         string adminUsername;
         bool adminIsAdmin;
         string auth_header = string(request.get_header_value("Authorization")).replace(0, 7, "");
-        if (auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, adminUsername, adminIsAdmin) || !adminIsAdmin) {
+        if (auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, adminUsername, adminIsAdmin)) {
             return crow::response(401, "You are not authorized to view this page");
         }
         string sql = "SELECT email, name, isAdmin FROM users;";
@@ -1093,6 +1288,145 @@ int main(void) {
         return crow::response{ 400 }; // Bad request if method not handled
     });
 
+    CROW_ROUTE(studentSync, "/api/grouping-sessions/")
+    .methods("GET"_method, "POST"_method)
+    ([](const crow::request& req) {
+        auto x = crow::json::load(req.body);
+        
+        if (req.method == "GET"_method){
+            vector<vector<string>> sessions = readSessions();
+            crow::json::wvalue result;
+            for (int i=0; i<sessions.size(); i++){
+                result[i]["id"] = sessions[i][0];
+                result[i]["sessionName"] = sessions[i][1];
+                result[i]["membersPerGroup"] = sessions[i][2];
+                result[i]["status"] = sessions[i][3];
+            }
+            return crow::response(200, result);
+        }
+
+        if (req.method == "POST"_method){
+            string sessionName = x["sessionName"].s();
+            int membersPerGroup = x["groupMembers"].i();
+            cout << sessionName << " " << membersPerGroup << endl;
+            addSession(sessionName, membersPerGroup, "Ongoing");
+            return crow::response(200, "Session added successfully");
+        }
+
+        
+    });
+
+    CROW_ROUTE(studentSync, "/api/grouping-sessions/<int>/")
+    .methods("GET"_method, "DELETE"_method, "PUT"_method)
+    ([](const crow::request& req, int id) {
+        auto x = crow::json::load(req.body);
+        string username;
+        bool adminIsAdmin;
+
+        string auth_header = string(req.get_header_value("Authorization")).replace(0, 7, "");
+        if (auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, username, adminIsAdmin)) {
+            return crow::response(401, "You must be logged in to view this data");
+        }
+
+        if (req.method == "GET"_method){
+            vector<vector<string>> sessions = readSessions();
+            crow::json::wvalue result;
+            for (int i=0; i<sessions.size(); i++){
+                if (stoi(sessions[i][0]) == id){
+                    result["id"] = sessions[i][0];
+                    result["sessionName"] = sessions[i][1];
+                    result["membersPerGroup"] = sessions[i][2];
+                    result["status"] = sessions[i][3];
+                    result["preferenceGiven"] = preferenceAlreadyGiven("GroupFormer/"+sessions[i][1]+"_"+sessions[i][0]+".csv", username);
+                }
+            }
+            return crow::response(200, result);
+        }
+
+        if (req.method == "DELETE"_method){
+            deleteSession(id);
+            return crow::response(200, "Session deleted successfully");
+        }
+        
+        if (req.method == "PUT"_method){
+            string status = x["status"].s();
+            updateSessionStatus(id, status);
+            return crow::response(200, "Session updated successfully");
+        }
+
+    });
+
+    CROW_ROUTE(studentSync,"/api/group-preferences/")
+    .methods("POST"_method)
+    ([](const crow::request& req) {
+        auto x = crow::json::load(req.body);
+        
+
+        if (req.method == "POST"_method){
+            string sessionName = x["sessionName"].s();
+            int sessionId = x["sessionId"].i();
+            auto preferences = x["preferences"];
+            string userEmail = x["email"].s();
+            vector<string> preferencesArray;
+            for (int i=0; i < preferences.size(); i ++){
+                preferencesArray.push_back(preferences[i].s());
+            }
+            string filename = "GroupFormer/"+sessionName+"_"+to_string(sessionId)+".csv";
+            TakePreferences(filename, userEmail, preferencesArray);
+            return crow::response(200, "Preferences added successfully");
+        }}
+    );
+
+    CROW_ROUTE(studentSync,"/api/form-groups/")
+    .methods("POST"_method)
+    ([db](const crow::request& req) {
+        auto x = crow::json::load(req.body);
+        if (req.method == "POST"_method){
+            string sessionName = x["sessionName"].s();
+            int sessionId = x["sessionId"].i();
+            string filename1 = "GroupFormer/"+sessionName+"_"+to_string(sessionId)+".csv";
+            string filename2 = "GroupFormer/"+sessionName+"_"+to_string(sessionId)+"result.csv";
+            int membersPerGroup = x["membersPerGroup"].i();
+            FormGroup(filename1, filename2, membersPerGroup);
+            updateSessionStatus(sessionId, "Completed");
+            return crow::response(200, "Group formed successfully");
+        }
+    });
+
+
+    CROW_ROUTE(studentSync, "/api/grouping-sessions/groups/")
+    .methods("POST"_method)
+    ([](const crow::request& req) {
+        if (req.method == "POST"_method){
+            vector<vector<string>> groups;
+            auto x = crow::json::load(req.body);
+            string sessionName = x["sessionName"].s();
+            int id = x["id"].i();
+            string filename = "GroupFormer/"+sessionName+"_"+to_string(id)+"result.csv";
+            ifstream file(filename);
+            string line;
+            string temp;
+            vector<string> row;
+            while (getline(file, line)){
+                for (int i=0; i<line.size(); i++){
+                    if (line[i] == ','){
+                        row.push_back(temp);
+                        temp = "";
+                    }
+                    else{
+                        temp += line[i];
+                    }
+                }
+                groups.push_back(row);
+                row.clear();
+            }
+            crow::json::wvalue result;
+            for (int i=0; i<groups.size(); i++){
+                result[i] = groups[i];
+            }
+            return crow::response(200, result);
+        }
+    });
     studentSync.port(2028).multithreaded().run();
 
 }
@@ -1403,4 +1737,104 @@ vector<vector<string>> getAllFinals(sqlite3* db, int subject_id) {
         finals.push_back(tempFinal);
     }
     return finals;
+}
+
+vector<vector<string>> readSessions() {
+    fstream file;
+    string filePath = "GroupFormer/sessions.csv";
+    vector<vector<string>> data;
+    vector<string> tempData;
+    file.open(filePath, ios::in);  // Open for reading
+    string tempLine;
+    string temp;
+    while (getline(file, tempLine)) {
+        temp = "";
+        for (int i=0; i<tempLine.length(); i++) {
+            if (tempLine[i] == ',') {
+                tempData.push_back(temp);
+                temp = "";
+            }
+            else {
+                temp += tempLine[i];
+            }
+        }
+        tempData.push_back(temp);
+        data.push_back(tempData);
+        tempData.clear();
+
+    }
+    file.close();
+    return data;
+}
+
+void addSession(string sessionName, int groupMembers, string status) {
+    fstream file;
+    string filePath = "GroupFormer/sessions.csv";
+    vector<string> data;
+    file.open(filePath, ios::in | ios::out); 
+    if (!file){
+        file.open(filePath, ios::out);
+        file.close();
+        file.open(filePath, ios::in | ios::out); 
+    }
+    string tempLine;
+    while (getline(file, tempLine)) {
+        data.push_back(tempLine);
+    }
+    file.clear();  
+    file.seekg(0, ios::end); 
+    file << data.size() + 1 << "," << sessionName << "," << groupMembers << "," << status << endl;  
+    file.close();
+}
+
+void deleteSession(int id) {
+    fstream file;
+    string filePath = "GroupFormer/sessions.csv";
+    vector<string> data;
+    file.open(filePath, ios::in); 
+    string tempLine;
+    while (getline(file, tempLine)) {
+        data.push_back(tempLine);
+    }
+    file.close();
+
+    file.open(filePath, ios::out | ios::trunc); 
+    for (int i = 0; i < data.size(); i++) {
+        if (data[i].find(to_string(id)) == string::npos) { 
+            file << data[i] << endl;
+        }
+    }
+    file.close();
+}
+
+void updateSessionStatus(int id, string status) {
+    fstream file;
+    string filePath = "GroupFormer/sessions.csv";
+    vector<string> data;
+    file.open(filePath, ios::in); 
+    string tempLine;
+    while (getline(file, tempLine)) {
+        data.push_back(tempLine);
+    }
+    file.close();
+
+    file.open(filePath, ios::out | ios::trunc);  
+    for (int i = 0; i < data.size(); i++) {
+        if (data[i].find(to_string(id)) != string::npos) {
+            vector<string> tempData;
+            string temp = "";
+            for (int j = 0; j < data[i].length(); j++) {
+                if (data[i][j] == ',') {
+                    tempData.push_back(temp);
+                    temp = "";
+                } else {
+                    temp += data[i][j];
+                }
+            }
+            tempData.push_back(temp);
+            data[i] = tempData[0] + "," + tempData[1] + "," + tempData[2] + "," + status;
+        }
+        file << data[i] << endl;  
+    }
+    file.close();
 }
