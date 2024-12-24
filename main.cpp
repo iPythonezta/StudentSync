@@ -18,295 +18,6 @@ struct Question {
     string answer;
 };
 
-void defaultAdminUser(sqlite3* db);
-void getUserData(sqlite3* db, string email, string password, string& name, bool& isAdmin);
-void createEvent(sqlite3* db, string title, string description, string schedule_at);
-void deleteEvent(sqlite3* db, int id);
-
-void addSession(string sessionName, int groupMembers, string status);
-void deleteSession(int id);
-void updateSessionStatus(int id, string status);
-vector<vector<string>> readSessions();
-
-string toLowerCase(const string& input);
-bool studentMarksToFile(string userEmail, string assesmentType, string obtainedMarks, string subjectId, string subName, string assesmentId);
-bool checkUserExxisits(sqlite3* db, string email);
-bool createUser(sqlite3* db, string email, string name, string password, bool isAdmin);
-bool deleteUser(sqlite3* db, string email);
-bool changePassword(sqlite3* db, string email, string newPassword);
-bool login(sqlite3* db, string email, string password);
-bool validate_token(string token, string secretToken);
-bool decodeToken(string token, string& username, bool& isAdmin);
-bool matchesIso8601(const string& date);
-
-int studentMarksFromFile(string userEmail, string assesmentType, int subjectId, string subName, int assesmentId);
-int executeSQL(sqlite3* db, const char* sql);
-
-string generate_token(sqlite3* db, string username, string password, string secretToken);
-// functon for fetching all tasks
-vector<vector<string>> getAllEvents(sqlite3* db);
-vector<vector<string>> getAllSubjects(sqlite3* db);
-vector<vector<string>> getAllQuizes(sqlite3* db, int subject_id);
-vector<vector<string>> getAllAssignments(sqlite3* db, int subject_id);
-vector<vector<string>> getAllMids(sqlite3* db, int subject_id);
-vector<vector<string>> getAllFinals(sqlite3* db, int subject_id);
-
-
-vector<Question> readCSV(const string& filename) {
-    ifstream file(filename);
-    string line;
-    vector<Question> Questions;
-
-    while (getline(file, line)) {
-        int commaPos1 = line.find(',');
-        int commaPos2 = line.rfind(',');
-        if (commaPos1 != string::npos && commaPos2 != string::npos && commaPos1 != commaPos2) {
-            Question Question;
-            Question.id = stoi(line.substr(0, commaPos1));
-            Question.question = line.substr(commaPos1 + 1, commaPos2 - commaPos1 - 1);
-            Question.answer = line.substr(commaPos2 + 1);
-            Questions.push_back(Question);
-        }
-    }
-    return Questions;
-}
-
-void writeCSV(const string& filename, const vector<Question>& Questions) {
-    ofstream file(filename);
-    for (const auto& Question : Questions) {
-        file << Question.id << "," << Question.question << "," << Question.answer << "\n";
-    }
-}
-
-void appendCSV(const string& filename, const Question& Question) {
-    ofstream file(filename, ios::app);
-    file << Question.id << "," << Question.question << "," << Question.answer << "\n";
-}
-
-
-void addQuestion(unordered_map<string, vector<Question>>& subjectMap, const string& subject, int id, const string& question, const string& answer) {
-    Question newQuestion = { id, question, answer };
-    subjectMap[subject].push_back(newQuestion);
-    appendCSV("quizes/" + subject + ".csv", newQuestion);
-}
-
-void deleteRow(vector<Question>& Questions, int delete_index) {
-    if (delete_index >= 0 && delete_index < Questions.size()) {
-        Questions.erase(Questions.begin() + delete_index);
-        // Adjust the IDs to be sequential
-        for (int i = delete_index; i < Questions.size(); ++i) {
-            Questions[i].id = i + 1;
-        }
-    }
-}
-
-string displayData(const vector<Question>& Questions) {
-    string result = "ID,Question,Answer\n";
-    for (const auto& Question : Questions) {
-        result += to_string(Question.id) + "," + Question.question + "," + Question.answer + "\n";
-    }
-    return result;
-}
-
-string readFile(const string& filename) {
-    ifstream file(filename);
-    if (!file.is_open()) {
-        cerr << "Error: Cannot open file " << filename << endl;
-        return "";
-    }
-    string content((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
-    return content;
-}
-
-
-void TakePreferences(const string& filename, const string& mail, const vector<string>& preferences) {
-    ofstream Outfile(filename, ios::app); // Open the file in append mode
-
-    if (!Outfile.is_open()) {
-        cerr << "Error: Could not open the file." << endl;
-        return;
-    }
-
-    Outfile << mail << ",";
-    for (const auto& pref : preferences) {
-        Outfile << pref << ",";
-    }
-    Outfile << "\n";
-
-    Outfile.close(); // Close the file
-}
-
-bool preferenceAlreadyGiven(const string& filename, const string& mail) {
-    ifstream Infile(filename);
-    string line;
-    while (getline(Infile, line)) {
-        line = toLowerCase(line);
-        line = line.substr(0, line.find(','));
-        if (line.find(mail) != string::npos) {
-            Infile.close();
-            return true;
-        }
-    }
-    Infile.close();
-    return false;
-}
-
-bool CheckPerson(const string& filename, const string& person1, const string& person2) {
-    ifstream Infile(filename);
-
-    if (!Infile.is_open()) {
-        cerr << "Error: Could not open the file." << endl;
-        return false;
-    }
-
-    string line;
-    while (getline(Infile, line)) {
-        stringstream ss(line);
-        string mail;
-        getline(ss, mail, ',');
-
-        if (mail == person2) {
-            string item;
-            while (getline(ss, item, ',')) {
-                if (item == person1) {
-                    Infile.close();
-                    return true;
-                }
-            }
-        }
-    }
-
-    Infile.close();
-    return false;
-}
-
-// Function to remove only the matched lines from the CSV
-void RemoveMatchedLines(const string& filename, const unordered_set<string>& mailsToKeep) {
-    ifstream infile(filename);
-    if (!infile.is_open()) {
-        cerr << "Error: Could not open the file." << endl;
-        return;
-    }
-
-    string tempFilename = "temp.csv";
-    ofstream outfile(tempFilename);
-    if (!outfile.is_open()) {
-        cerr << "Error: Could not open the temporary file." << endl;
-        return;
-    }
-
-    string line;
-    while (getline(infile, line)) {
-        stringstream ss(line);
-        string mail;
-        getline(ss, mail, ',');
-
-        if (mailsToKeep.find(mail) == mailsToKeep.end()) {
-            outfile << line << endl;
-        }
-    }
-
-    infile.close();
-    outfile.close();
-
-    // Replace the original file with the temporary file
-    if (remove(filename.c_str()) != 0) {
-        cerr << "Error: Could not delete the original file." << endl;
-        return;
-    }
-    if (rename(tempFilename.c_str(), filename.c_str()) != 0) {
-        cerr << "Error: Could not rename the temporary file." << endl;
-    }
-    else {
-        cout << "Matched lines removed successfully." << endl;
-    }
-}
-void FormGroup(const string& filename1, const string& filename2, int groupSize) {
-    ifstream Infile(filename1);
-    if (!Infile.is_open()) {
-        cerr << "Error: Could not open the file." << endl;
-        return;
-    }
-
-    vector<string> group;
-    unordered_set<string> visited;
-    unordered_set<string> mailsToKeep;
-    vector<string> ungrouped; // List to store ungrouped users
-
-    string line;
-    while (getline(Infile, line)) {
-        stringstream ss(line);
-        string item;
-        getline(ss, item, ',');
-
-        if (visited.find(item) != visited.end()) {
-            continue; // Skip already grouped users
-        }
-
-        group.push_back(item);
-        visited.insert(item);
-
-        while (getline(ss, item, ',')) {
-            if (visited.find(item) == visited.end() && CheckPerson(filename1, group[0], item)) {
-                group.push_back(item);
-                visited.insert(item);
-
-                if (group.size() == groupSize) {
-                    break;
-                }
-            }
-        }
-
-        // Write the group if it meets the required size
-        if (group.size() == groupSize) {
-            ofstream Outfile(filename2, ios::app);
-            if (Outfile.is_open()) {
-                for (const auto& member : group) {
-                    Outfile << member << ",";
-                    mailsToKeep.insert(member);
-                }
-                Outfile << "\n";
-                Outfile.close();
-            } else {
-                cerr << "Error: Could not open the output file." << endl;
-            }
-            group.clear();
-        } else {
-            // If not enough members, add to ungrouped
-            ungrouped.insert(ungrouped.end(), group.begin(), group.end());
-            group.clear();
-        }
-    }
-
-    Infile.close();
-
-    // Handle leftover ungrouped users
-    if (!ungrouped.empty()) {
-        ofstream Outfile(filename2, ios::app);
-        if (Outfile.is_open()) {
-            for (size_t i = 0; i < ungrouped.size(); ++i) {
-                Outfile << ungrouped[i] << ",";
-                mailsToKeep.insert(ungrouped[i]);
-
-                // Write a new line when group size is reached
-                if ((i + 1) % groupSize == 0) {
-                    Outfile << "\n";
-                }
-            }
-            // Handle any remaining users
-            if (ungrouped.size() % groupSize != 0) {
-                Outfile << "\n";
-            }
-            Outfile.close();
-        } else {
-            cerr << "Error: Could not open the output file for leftovers." << endl;
-        }
-    }
-
-    // Remove processed entries
-    RemoveMatchedLines(filename1, mailsToKeep);
-}
-
 struct CORS {
     struct context {};
 
@@ -328,6 +39,65 @@ struct CORS {
         res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     }
 };
+
+// Initialization
+int executeSQL(sqlite3* db, const char* sql);
+void defaultAdminUser(sqlite3* db);
+bool login(sqlite3* db, string email, string password);
+bool checkUserExxisits(sqlite3* db, string email);
+
+// For the Calender
+void getUserData(sqlite3* db, string email, string password, string& name, bool& isAdmin);
+void createEvent(sqlite3* db, string title, string description, string schedule_at);
+void deleteEvent(sqlite3* db, int id);
+
+// JWT functions
+string generate_token(sqlite3* db, string username, string password, string secretToken);
+bool decodeToken(string token, string& username, bool& isAdmin);
+bool validate_token(string token, string secretToken);
+
+// Users Table Functions
+bool createUser(sqlite3* db, string email, string name, string password, bool isAdmin);
+bool deleteUser(sqlite3* db, string email);
+
+// Profile function
+bool changePassword(sqlite3* db, string email, string newPassword);
+
+// Utility Functions
+string toLowerCase(const string& input);
+bool matchesIso8601(const string& date);
+
+// For Reading and Writing
+bool studentMarksToFile(string userEmail, string assesmentType, string obtainedMarks, string subjectId, string subName, string assesmentId);
+int studentMarksFromFile(string userEmail, string assesmentType, int subjectId, string subName, int assesmentId);
+
+// functon for fetching all tasks
+vector<vector<string>> getAllEvents(sqlite3* db);
+vector<vector<string>> getAllSubjects(sqlite3* db);
+vector<vector<string>> getAllQuizes(sqlite3* db, int subject_id);
+vector<vector<string>> getAllAssignments(sqlite3* db, int subject_id);
+vector<vector<string>> getAllMids(sqlite3* db, int subject_id);
+vector<vector<string>> getAllFinals(sqlite3* db, int subject_id);
+
+// Quiz Bank Functions
+vector<Question> readCSV(const string& filename);
+void writeCSV(const string& filename, const vector<Question>& Questions);
+void appendCSV(const string& filename, const Question& Question);
+void addQuestion(unordered_map<string, vector<Question>>& subjectMap, const string& subject, int id, const string& question, const string& answer);
+void deleteRow(vector<Question>& Questions, int delete_index);
+string displayData(const vector<Question>& Questions);
+
+// Group Former Functions
+void addSession(string sessionName, int groupMembers, string status);
+void deleteSession(int id);
+void updateSessionStatus(int id, string status);
+vector<vector<string>> readSessions();
+string readFile(const string& filename);
+void TakePreferences(const string& filename, const string& mail, const vector<string>& preferences);
+bool preferenceAlreadyGiven(const string& filename, const string& mail);
+bool CheckPerson(const string& filename, const string& person1, const string& person2);
+void RemoveMatchedLines(const string& filename, const unordered_set<string>& mailsToKeep);
+void FormGroup(const string& filename1, const string& filename2, int groupSize);
 
 int main(void) {
     sqlite3* db;
@@ -434,13 +204,6 @@ int main(void) {
         auto page = crow::mustache::load("frontend/build/index.html");
         return page.render();
             });
-
-    // static files
-    /*CROW_ROUTE(studentSync, "/static/<path>")
-    ([](const crow::request& req, crow::response& res, string path) {
-        crow::response resp;
-        resp.set_static_file_info("frontend/build/static/" + path);
-    });*/
 
     CROW_ROUTE(studentSync, "/api/register/")
         .methods("POST"_method)
@@ -1430,6 +1193,7 @@ int main(void) {
     studentSync.port(2028).multithreaded().run();
 
 }
+
 bool studentMarksToFile(string userEmail, string assesmentType, string obtainedMarks, string subjectId, string subName, string assesmentId) {
     fstream file;
     string filePath = "student_marks/" + subName + "_" + subjectId + ".csv";
@@ -1488,6 +1252,21 @@ int studentMarksFromFile(string userEmail, string assesmentType, int subjectId, 
     return 0;
 }
 
+bool matchesIso8601(const string& date) {
+    const regex iso8601Regex(R"(^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d(:[0-5]\d(\.\d+)?([+-][0-2]\d:[0-5]\d|Z)?)?$)");
+
+    return regex_match(date, iso8601Regex);
+}
+
+// Function to convert a string to lowercase
+string toLowerCase(const string& input) {
+    string lowerCaseInput = input; // Create a copy of the input string
+    for (size_t i = 0; i < lowerCaseInput.length(); i++) {
+        lowerCaseInput[i] = tolower(lowerCaseInput[i]); // Convert each character to lowercase
+    }
+    return lowerCaseInput;
+}
+
 int executeSQL(sqlite3* db, const char* sql) {
     char* errorMessage;
     int exit = sqlite3_exec(db, sql, nullptr, 0, &errorMessage);
@@ -1500,13 +1279,66 @@ int executeSQL(sqlite3* db, const char* sql) {
     return 0;
 }
 
-// Function to convert a string to lowercase
-string toLowerCase(const string& input) {
-    string lowerCaseInput = input; // Create a copy of the input string
-    for (size_t i = 0; i < lowerCaseInput.length(); i++) {
-        lowerCaseInput[i] = tolower(lowerCaseInput[i]); // Convert each character to lowercase
+string generate_token(sqlite3* db, string username, string password, string secretToken) {
+    bool isAdmin;
+    string name;
+    getUserData(db, username, password, name, isAdmin);
+    return jwt::create()
+        .set_issuer("StudentSync")
+        .set_payload_claim("username", jwt::claim(username))
+        .set_payload_claim("role", jwt::claim(string(isAdmin ? "admin" : "user")))
+        .sign(jwt::algorithm::hs256(secretToken));
+}
+
+bool validate_token(string token, string secretToken) {
+    try {
+        auto decoded_token = jwt::decode(token);
+        auto verifier = jwt::verify().allow_algorithm(jwt::algorithm::hs256(secretToken)).with_issuer("StudentSync");
+        verifier.verify(decoded_token);
+        return true;
     }
-    return lowerCaseInput;
+    catch (const exception& e) {
+        return false;
+    }
+}
+
+bool decodeToken(string token, string& username, bool& isAdmin) {
+    try {
+        auto decoded_token = jwt::decode(token);
+        username = decoded_token.get_payload_claim("username").as_string();
+        isAdmin = decoded_token.get_payload_claim("role").as_string() == "admin";
+        return true;
+    }
+    catch (const exception& e) {
+        return false;
+    }
+}
+
+void defaultAdminUser(sqlite3* db) {
+    if (checkUserExxisits(db, "admin")) {
+        return;
+    }
+    createUser(db, "admin", "admin", "admin", true);
+}
+
+bool login(sqlite3* db, string email, string password) {
+    string sql = "SELECT email FROM users WHERE email = '" + email + "' AND password = '" + password + "';";
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    int result = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return result == SQLITE_ROW;
+}
+
+void getUserData(sqlite3* db, string email, string password, string& name, bool& isAdmin) {
+    email = toLowerCase(email); // Convert email to lowercase
+    string sql = "SELECT name, isAdmin FROM users WHERE email = '" + email + "' AND password = '" + password + "';";
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    sqlite3_step(stmt);
+    name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+    isAdmin = sqlite3_column_int(stmt, 1);
+    sqlite3_finalize(stmt);
 }
 
 bool checkUserExxisits(sqlite3* db, string email) {
@@ -1548,74 +1380,6 @@ bool changePassword(sqlite3* db, string email, string newPassword) {
     string sql = "UPDATE users SET password = '" + newPassword + "' WHERE email = '" + email + "';";
     executeSQL(db, sql.c_str());
     return true; // return true if password is changed
-}
-
-void defaultAdminUser(sqlite3* db) {
-    if (checkUserExxisits(db, "admin")) {
-        return;
-    }
-    createUser(db, "admin", "admin", "admin", true);
-}
-
-bool login(sqlite3* db, string email, string password) {
-    string sql = "SELECT email FROM users WHERE email = '" + email + "' AND password = '" + password + "';";
-    sqlite3_stmt* stmt;
-    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
-    int result = sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-    return result == SQLITE_ROW;
-}
-
-void getUserData(sqlite3* db, string email, string password, string& name, bool& isAdmin) {
-    email = toLowerCase(email); // Convert email to lowercase
-    string sql = "SELECT name, isAdmin FROM users WHERE email = '" + email + "' AND password = '" + password + "';";
-    sqlite3_stmt* stmt;
-    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
-    sqlite3_step(stmt);
-    name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
-    isAdmin = sqlite3_column_int(stmt, 1);
-    sqlite3_finalize(stmt);
-}
-
-string generate_token(sqlite3* db, string username, string password, string secretToken) {
-    bool isAdmin;
-    string name;
-    getUserData(db, username, password, name, isAdmin);
-    return jwt::create()
-        .set_issuer("StudentSync")
-        .set_payload_claim("username", jwt::claim(username))
-        .set_payload_claim("role", jwt::claim(string(isAdmin ? "admin" : "user")))
-        .sign(jwt::algorithm::hs256(secretToken));
-}
-
-bool validate_token(string token, string secretToken) {
-    try {
-        auto decoded_token = jwt::decode(token);
-        auto verifier = jwt::verify().allow_algorithm(jwt::algorithm::hs256(secretToken)).with_issuer("StudentSync");
-        verifier.verify(decoded_token);
-        return true;
-    }
-    catch (const exception& e) {
-        return false;
-    }
-}
-
-bool decodeToken(string token, string& username, bool& isAdmin) {
-    try {
-        auto decoded_token = jwt::decode(token);
-        username = decoded_token.get_payload_claim("username").as_string();
-        isAdmin = decoded_token.get_payload_claim("role").as_string() == "admin";
-        return true;
-    }
-    catch (const exception& e) {
-        return false;
-    }
-}
-
-bool matchesIso8601(const string& date) {
-    const regex iso8601Regex(R"(^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d(:[0-5]\d(\.\d+)?([+-][0-2]\d:[0-5]\d|Z)?)?$)");
-
-    return regex_match(date, iso8601Regex);
 }
 
 void createEvent(sqlite3* db, string title, string description, string schedule_at) {
@@ -1837,4 +1601,262 @@ void updateSessionStatus(int id, string status) {
         file << data[i] << endl;  
     }
     file.close();
+}
+
+vector<Question> readCSV(const string& filename) {
+    ifstream file(filename);
+    string line;
+    vector<Question> Questions;
+
+    while (getline(file, line)) {
+        int commaPos1 = line.find(',');
+        int commaPos2 = line.rfind(',');
+        if (commaPos1 != string::npos && commaPos2 != string::npos && commaPos1 != commaPos2) {
+            Question Question;
+            Question.id = stoi(line.substr(0, commaPos1));
+            Question.question = line.substr(commaPos1 + 1, commaPos2 - commaPos1 - 1);
+            Question.answer = line.substr(commaPos2 + 1);
+            Questions.push_back(Question);
+        }
+    }
+    return Questions;
+}
+
+void writeCSV(const string& filename, const vector<Question>& Questions) {
+    ofstream file(filename);
+    for (const auto& Question : Questions) {
+        file << Question.id << "," << Question.question << "," << Question.answer << "\n";
+    }
+}
+
+void appendCSV(const string& filename, const Question& Question) {
+    ofstream file(filename, ios::app);
+    file << Question.id << "," << Question.question << "," << Question.answer << "\n";
+}
+
+void addQuestion(unordered_map<string, vector<Question>>& subjectMap, const string& subject, int id, const string& question, const string& answer) {
+    Question newQuestion = { id, question, answer };
+    subjectMap[subject].push_back(newQuestion);
+    appendCSV("quizes/" + subject + ".csv", newQuestion);
+}
+
+void deleteRow(vector<Question>& Questions, int delete_index) {
+    if (delete_index >= 0 && delete_index < Questions.size()) {
+        Questions.erase(Questions.begin() + delete_index);
+        // Adjust the IDs to be sequential
+        for (int i = delete_index; i < Questions.size(); ++i) {
+            Questions[i].id = i + 1;
+        }
+    }
+}
+
+string displayData(const vector<Question>& Questions) {
+    string result = "ID,Question,Answer\n";
+    for (const auto& Question : Questions) {
+        result += to_string(Question.id) + "," + Question.question + "," + Question.answer + "\n";
+    }
+    return result;
+}
+
+string readFile(const string& filename) {
+    ;
+    ifstream file(filename);
+    if (!file.is_open()) {
+        cerr << "Error: Cannot open file " << filename << endl;
+        return "";
+    }
+    string content((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
+    return content;
+}
+
+
+void TakePreferences(const string& filename, const string& mail, const vector<string>& preferences) {
+    ofstream Outfile(filename, ios::app); // Open the file in append mode
+
+    if (!Outfile.is_open()) {
+        cerr << "Error: Could not open the file." << endl;
+        return;
+    }
+
+    Outfile << mail << ",";
+    for (const auto& pref : preferences) {
+        Outfile << pref << ",";
+    }
+    Outfile << "\n";
+
+    Outfile.close(); // Close the file
+}
+
+bool preferenceAlreadyGiven(const string& filename, const string& mail) {
+    ifstream Infile(filename);
+    string line;
+    while (getline(Infile, line)) {
+        line = toLowerCase(line);
+        line = line.substr(0, line.find(','));
+        if (line.find(mail) != string::npos) {
+            Infile.close();
+            return true;
+        }
+    }
+    Infile.close();
+    return false;
+}
+
+bool CheckPerson(const string& filename, const string& person1, const string& person2) {
+    ifstream Infile(filename);
+
+    if (!Infile.is_open()) {
+        cerr << "Error: Could not open the file." << endl;
+        return false;
+    }
+
+    string line;
+    while (getline(Infile, line)) {
+        stringstream ss(line);
+        string mail;
+        getline(ss, mail, ',');
+
+        if (mail == person2) {
+            string item;
+            while (getline(ss, item, ',')) {
+                if (item == person1) {
+                    Infile.close();
+                    return true;
+                }
+            }
+        }
+    }
+
+    Infile.close();
+    return false;
+}
+
+// Function to remove only the matched lines from the CSV
+void RemoveMatchedLines(const string& filename, const unordered_set<string>& mailsToKeep) {
+    ifstream infile(filename);
+    if (!infile.is_open()) {
+        cerr << "Error: Could not open the file." << endl;
+        return;
+    }
+
+    string tempFilename = "temp.csv";
+    ofstream outfile(tempFilename);
+    if (!outfile.is_open()) {
+        cerr << "Error: Could not open the temporary file." << endl;
+        return;
+    }
+
+    string line;
+    while (getline(infile, line)) {
+        stringstream ss(line);
+        string mail;
+        getline(ss, mail, ',');
+
+        if (mailsToKeep.find(mail) == mailsToKeep.end()) {
+            outfile << line << endl;
+        }
+    }
+
+    infile.close();
+    outfile.close();
+
+    // Replace the original file with the temporary file
+    if (remove(filename.c_str()) != 0) {
+        cerr << "Error: Could not delete the original file." << endl;
+        return;
+    }
+    if (rename(tempFilename.c_str(), filename.c_str()) != 0) {
+        cerr << "Error: Could not rename the temporary file." << endl;
+    }
+    else {
+        cout << "Matched lines removed successfully." << endl;
+    }
+}
+void FormGroup(const string& filename1, const string& filename2, int groupSize) {
+    ifstream Infile(filename1);
+    if (!Infile.is_open()) {
+        cerr << "Error: Could not open the file." << endl;
+        return;
+    }
+
+    vector<string> group;
+    unordered_set<string> visited;
+    unordered_set<string> mailsToKeep;
+    vector<string> ungrouped; // List to store ungrouped users
+
+    string line;
+    while (getline(Infile, line)) {
+        stringstream ss(line);
+        string item;
+        getline(ss, item, ',');
+
+        if (visited.find(item) != visited.end()) {
+            continue; // Skip already grouped users
+        }
+
+        group.push_back(item);
+        visited.insert(item);
+
+        while (getline(ss, item, ',')) {
+            if (visited.find(item) == visited.end() && CheckPerson(filename1, group[0], item)) {
+                group.push_back(item);
+                visited.insert(item);
+
+                if (group.size() == groupSize) {
+                    break;
+                }
+            }
+        }
+
+        // Write the group if it meets the required size
+        if (group.size() == groupSize) {
+            ofstream Outfile(filename2, ios::app);
+            if (Outfile.is_open()) {
+                for (const auto& member : group) {
+                    Outfile << member << ",";
+                    mailsToKeep.insert(member);
+                }
+                Outfile << "\n";
+                Outfile.close();
+            }
+            else {
+                cerr << "Error: Could not open the output file." << endl;
+            }
+            group.clear();
+        }
+        else {
+            // If not enough members, add to ungrouped
+            ungrouped.insert(ungrouped.end(), group.begin(), group.end());
+            group.clear();
+        }
+    }
+
+    Infile.close();
+
+    // Handle leftover ungrouped users
+    if (!ungrouped.empty()) {
+        ofstream Outfile(filename2, ios::app);
+        if (Outfile.is_open()) {
+            for (size_t i = 0; i < ungrouped.size(); ++i) {
+                Outfile << ungrouped[i] << ",";
+                mailsToKeep.insert(ungrouped[i]);
+
+                // Write a new line when group size is reached
+                if ((i + 1) % groupSize == 0) {
+                    Outfile << "\n";
+                }
+            }
+            // Handle any remaining users
+            if (ungrouped.size() % groupSize != 0) {
+                Outfile << "\n";
+            }
+            Outfile.close();
+        }
+        else {
+            cerr << "Error: Could not open the output file for leftovers." << endl;
+        }
+    }
+
+    // Remove processed entries
+    RemoveMatchedLines(filename1, mailsToKeep);
 }
