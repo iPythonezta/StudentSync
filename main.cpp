@@ -18,27 +18,27 @@ struct Question {
     string answer;
 };
 
-struct CORS {
-    struct context {};
+// struct CORS {
+//     struct context {};
 
-    void before_handle(crow::request& req, crow::response& res, context&) {
-        // Handle Preflight Requests (OPTIONS method)
-        if (req.method == crow::HTTPMethod::OPTIONS) {
-            res.add_header("Access-Control-Allow-Origin", "http://localhost:3000"); // Allowed origin
-            res.add_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-            res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-            res.code = 204; // No Content
-            res.end();
-        }
-    }
+//     void before_handle(crow::request& req, crow::response& res, context&) {
+//         // Handle Preflight Requests (OPTIONS method)
+//         if (req.method == crow::HTTPMethod::OPTIONS) {
+//             res.add_header("Access-Control-Allow-Origin", "http://localhost:3000"); // Allowed origin
+//             res.add_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+//             res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+//             res.code = 204; // No Content
+//             res.end();
+//         }
+//     }
 
-    void after_handle(crow::request&, crow::response& res, context&) {
-        // Add CORS headers to all responses
-        res.add_header("Access-Control-Allow-Origin", "http://localhost:3000");
-        res.add_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    }
-};
+//     void after_handle(crow::request&, crow::response& res, context&) {
+//         // Add CORS headers to all responses
+//         res.add_header("Access-Control-Allow-Origin", "http://localhost:3000");
+//         res.add_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+//         res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+//     }
+// };
 
 // Initialization
 int executeSQL(sqlite3* db, const char* sql);
@@ -196,7 +196,8 @@ int main(void) {
 
     defaultAdminUser(db);
 
-    crow::App<CORS> studentSync;
+    // crow::App<CORS> studentSync;
+    crow::SimpleApp studentSync;
     crow::mustache::set_global_base(".");
     // serve home page (React) frontend/build
     CROW_ROUTE(studentSync, "/")
@@ -1818,6 +1819,53 @@ void FormGroups(const string filename1, const string filename2, int groupSize, v
         }
     }
 
+    for (auto &group:groups){
+        unordered_map<string, int> emailCount;
+        if (group.size() >= groupSize){
+            continue;
+        }
+        for (int i=0; i<group.size(); i++){
+            if (group.size() >= groupSize){
+                break;
+            }
+            auto tempPreferences = preferences[group[i]];
+            for (auto preference:tempPreferences){
+                if (group.size() >= groupSize){
+                    break;
+                }
+                if (grouped.count(preference)){
+                    continue;
+                }
+                if (emailCount.count(preference) == 0){
+                    emailCount[preference] = 1;
+                }
+                else{
+                    emailCount[preference]++;
+                }
+            }
+            
+        }
+
+        vector<pair<int, string>> sortedEmails;
+        for (const auto &entry : emailCount) {
+            sortedEmails.push_back({entry.second, entry.first});
+        }
+
+        // Sort the emails based on their frequency in descending order
+        sort(sortedEmails.rbegin(), sortedEmails.rend());
+
+        // Add the most popular emails to the group until it reaches the required size
+        for (auto &email : sortedEmails) {
+            if (group.size() >= groupSize) {
+                break;
+            }
+            if (grouped.count(email.second) == 0) {
+                group.push_back(email.second);
+                grouped.insert(email.second);
+            }
+        }
+    }
+
     int requiredGroups = ceil((double(emails.size()) / double(groupSize))) - groups.size();
     vector<string> remainingEmails;
 
@@ -1837,6 +1885,79 @@ void FormGroups(const string filename1, const string filename2, int groupSize, v
         grouped.insert(remainingEmails[randEmail]); 
         remainingEmails.erase(remainingEmails.begin()+randEmail);
         groups.push_back(tempGroup);
+    }
+
+    // Fill groups to required size
+    for (auto &group:groups){
+        if (group.size() >= groupSize){
+            continue;
+        }
+        for (int i=0; i<group.size(); i++){
+            auto tempPreferences = preferences[group[i]];
+            for (auto preference:tempPreferences){
+                if (group.size() >= groupSize){
+                    break;
+                }
+                if (grouped.count(preference)){
+                    continue;
+                }
+                mutual = checkMutualPreference(group[i], preference, preferences);
+                if (mutual){
+                    group.push_back(preference);
+                    grouped.insert(preference); 
+                }
+            }
+            if (group.size() >= groupSize){
+                break;
+            }
+        }
+    }
+
+    for (auto &group:groups){
+        unordered_map<string, int> emailCount;
+        if (group.size() >= groupSize){
+            continue;
+        }
+        for (int i=0; i<group.size(); i++){
+            if (group.size() >= groupSize){
+                break;
+            }
+            auto tempPreferences = preferences[group[i]];
+            for (auto preference:tempPreferences){
+                if (group.size() >= groupSize){
+                    break;
+                }
+                if (grouped.count(preference)){
+                    continue;
+                }
+                if (emailCount.count(preference) == 0){
+                    emailCount[preference] = 1;
+                }
+                else{
+                    emailCount[preference]++;
+                }
+            }
+            
+        }
+
+        vector<pair<int, string>> sortedEmails;
+        for (const auto &entry : emailCount) {
+            sortedEmails.push_back({entry.second, entry.first});
+        }
+
+        // Sort the emails based on their frequency in descending order
+        sort(sortedEmails.rbegin(), sortedEmails.rend());
+
+        // Add the most popular emails to the group until it reaches the required size
+        for (auto &email : sortedEmails) {
+            if (group.size() >= groupSize) {
+                break;
+            }
+            if (grouped.count(email.second) == 0) {
+                group.push_back(email.second);
+                grouped.insert(email.second);
+            }
+        }
     }
 
     for (auto &group:groups){
