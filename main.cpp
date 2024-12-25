@@ -95,9 +95,9 @@ vector<vector<string>> readSessions();
 string readFile(const string& filename);
 void TakePreferences(const string& filename, const string& mail, const vector<string>& preferences);
 bool preferenceAlreadyGiven(const string& filename, const string& mail);
-bool CheckPerson(const string& filename, const string& person1, const string& person2);
-void RemoveMatchedLines(const string& filename, const unordered_set<string>& mailsToKeep);
-void FormGroup(const string& filename1, const string& filename2, int groupSize);
+
+bool checkMutualPreference(string email1, string email2, unordered_map<string, vector<string>>& preferences);
+void FormGroups(const string filename1, const string filename2, int groupSize, vector<string> emails);
 
 int main(void) {
     sqlite3* db;
@@ -1150,7 +1150,19 @@ int main(void) {
             string filename1 = "GroupFormer/"+sessionName+"_"+to_string(sessionId)+".csv";
             string filename2 = "GroupFormer/"+sessionName+"_"+to_string(sessionId)+"result.csv";
             int membersPerGroup = x["membersPerGroup"].i();
-            FormGroup(filename1, filename2, membersPerGroup);
+            vector<string> emails;
+            string sql = "SELECT email,name FROM users";
+            string email,name;
+            sqlite3_stmt* stmt;
+            sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                email = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+                name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)));
+                if (email.find(".bese24seecs") != string::npos){
+                    emails.push_back(email);
+                }
+            }
+            FormGroups(filename1, filename2, membersPerGroup, emails);
             updateSessionStatus(sessionId, "Completed");
             return crow::response(200, "Group formed successfully");
         }
@@ -1557,19 +1569,27 @@ void deleteSession(int id) {
     vector<string> data;
     file.open(filePath, ios::in); 
     string tempLine;
+
     while (getline(file, tempLine)) {
-        data.push_back(tempLine);
+        int commaPos = tempLine.find(',');
+        if (commaPos != string::npos) {
+            string sessionId = tempLine.substr(0, commaPos); 
+            if (sessionId != to_string(id)) { 
+                data.push_back(tempLine); 
+            }
+        } else {
+            data.push_back(tempLine);
+        }
     }
     file.close();
 
     file.open(filePath, ios::out | ios::trunc); 
-    for (int i = 0; i < data.size(); i++) {
-        if (data[i].find(to_string(id)) == string::npos) { 
-            file << data[i] << endl;
-        }
+    for (const auto& line : data) {
+        file << line << endl;
     }
     file.close();
 }
+
 
 void updateSessionStatus(int id, string status) {
     fstream file;
@@ -1702,161 +1722,141 @@ bool preferenceAlreadyGiven(const string& filename, const string& mail) {
     return false;
 }
 
-bool CheckPerson(const string& filename, const string& person1, const string& person2) {
-    ifstream Infile(filename);
-
-    if (!Infile.is_open()) {
-        cerr << "Error: Could not open the file." << endl;
-        return false;
-    }
-
-    string line;
-    while (getline(Infile, line)) {
-        stringstream ss(line);
-        string mail;
-        getline(ss, mail, ',');
-
-        if (mail == person2) {
-            string item;
-            while (getline(ss, item, ',')) {
-                if (item == person1) {
-                    Infile.close();
-                    return true;
-                }
-            }
+bool checkMutualPreference(string email1, string email2, unordered_map<string, vector<string>>& preferences){
+    for (int i=0; i<preferences[email2].size(); i++){
+        if(preferences[email2][i] == email1){
+            return true;
         }
     }
-
-    Infile.close();
     return false;
 }
+void FormGroups(const string filename1, const string filename2, int groupSize, vector<string> emails){
+    srand(time(0));
+    vector<vector<string>> groups;
+    unordered_map<string, vector<string>> preferences;
+    unordered_set<string> grouped;
+    fstream file;
+    file.open(filename1, ios::in);
+    string line, tempEmail;
 
-// Function to remove only the matched lines from the CSV
-void RemoveMatchedLines(const string& filename, const unordered_set<string>& mailsToKeep) {
-    ifstream infile(filename);
-    if (!infile.is_open()) {
-        cerr << "Error: Could not open the file." << endl;
-        return;
-    }
-
-    string tempFilename = "temp.csv";
-    ofstream outfile(tempFilename);
-    if (!outfile.is_open()) {
-        cerr << "Error: Could not open the temporary file." << endl;
-        return;
-    }
-
-    string line;
-    while (getline(infile, line)) {
-        stringstream ss(line);
-        string mail;
-        getline(ss, mail, ',');
-
-        if (mailsToKeep.find(mail) == mailsToKeep.end()) {
-            outfile << line << endl;
+    // Reading preferences from file
+    while (getline(file, line)){
+        string temp;
+        vector<string> row;
+        tempEmail = "";
+        for (int i=0; i<line.size(); i++){
+            if (line[i] == ','){
+                if (tempEmail == ""){
+                    tempEmail = temp;
+                }
+                else{
+                    row.push_back(temp);
+                }
+                temp = "";
+            }
+            else{
+                temp += line[i];
+            }
         }
-    }
-
-    infile.close();
-    outfile.close();
-
-    // Replace the original file with the temporary file
-    if (remove(filename.c_str()) != 0) {
-        cerr << "Error: Could not delete the original file." << endl;
-        return;
-    }
-    if (rename(tempFilename.c_str(), filename.c_str()) != 0) {
-        cerr << "Error: Could not rename the temporary file." << endl;
-    }
-    else {
-        cout << "Matched lines removed successfully." << endl;
-    }
-}
-void FormGroup(const string& filename1, const string& filename2, int groupSize) {
-    ifstream Infile(filename1);
-    if (!Infile.is_open()) {
-        cerr << "Error: Could not open the file." << endl;
-        return;
-    }
-
-    vector<string> group;
-    unordered_set<string> visited;
-    unordered_set<string> mailsToKeep;
-    vector<string> ungrouped; // List to store ungrouped users
-
-    string line;
-    while (getline(Infile, line)) {
-        stringstream ss(line);
-        string item;
-        getline(ss, item, ',');
-
-        if (visited.find(item) != visited.end()) {
-            continue; // Skip already grouped users
+        if (temp.size() > 0){
+            row.push_back(temp);
         }
+        preferences[tempEmail] = row;
+    }
+    file.close();
 
-        group.push_back(item);
-        visited.insert(item);
+    bool mutual;
+    vector<string> tempGroup;
 
-        while (getline(ss, item, ',')) {
-            if (visited.find(item) == visited.end() && CheckPerson(filename1, group[0], item)) {
-                group.push_back(item);
-                visited.insert(item);
-
-                if (group.size() == groupSize) {
+    // Initial grouping based on preferences
+    for (auto pair:preferences){
+        if (grouped.count(pair.first) == 1){
+            continue;
+        }
+        for (int i=0; i < pair.second.size(); i++){
+            if (grouped.count(pair.second[i]) == 1){
+                continue;
+            }
+            else {
+                mutual = checkMutualPreference(pair.first, pair.second[i], preferences);
+                if (mutual){
+                    tempGroup.clear();
+                    tempGroup.push_back(pair.first);
+                    tempGroup.push_back(pair.second[i]);
+                    groups.push_back(tempGroup);
+                    grouped.insert(pair.first);
+                    grouped.insert(pair.second[i]); 
                     break;
                 }
             }
         }
+    }
 
-        // Write the group if it meets the required size
-        if (group.size() == groupSize) {
-            ofstream Outfile(filename2, ios::app);
-            if (Outfile.is_open()) {
-                for (const auto& member : group) {
-                    Outfile << member << ",";
-                    mailsToKeep.insert(member);
-                }
-                Outfile << "\n";
-                Outfile.close();
-            }
-            else {
-                cerr << "Error: Could not open the output file." << endl;
-            }
-            group.clear();
+    // Fill groups to required size
+    for (auto &group:groups){
+        if (group.size() >= groupSize){
+            continue;
         }
-        else {
-            // If not enough members, add to ungrouped
-            ungrouped.insert(ungrouped.end(), group.begin(), group.end());
-            group.clear();
+        for (int i=0; i<group.size(); i++){
+            auto tempPreferences = preferences[group[i]];
+            for (auto preference:tempPreferences){
+                if (group.size() >= groupSize){
+                    break;
+                }
+                if (grouped.count(preference)){
+                    continue;
+                }
+                mutual = checkMutualPreference(group[i], preference, preferences);
+                if (mutual){
+                    group.push_back(preference);
+                    grouped.insert(preference); 
+                }
+            }
+            if (group.size() >= groupSize){
+                break;
+            }
         }
     }
 
-    Infile.close();
+    int requiredGroups = ceil((double(emails.size()) / double(groupSize))) - groups.size();
+    vector<string> remainingEmails;
 
-    // Handle leftover ungrouped users
-    if (!ungrouped.empty()) {
-        ofstream Outfile(filename2, ios::app);
-        if (Outfile.is_open()) {
-            for (size_t i = 0; i < ungrouped.size(); ++i) {
-                Outfile << ungrouped[i] << ",";
-                mailsToKeep.insert(ungrouped[i]);
-
-                // Write a new line when group size is reached
-                if ((i + 1) % groupSize == 0) {
-                    Outfile << "\n";
-                }
-            }
-            // Handle any remaining users
-            if (ungrouped.size() % groupSize != 0) {
-                Outfile << "\n";
-            }
-            Outfile.close();
-        }
-        else {
-            cerr << "Error: Could not open the output file for leftovers." << endl;
+    // Collect remaining emails that haven't been grouped
+    for (auto email : emails) {
+        if (grouped.count(email) == 0) {
+            remainingEmails.push_back(email);
         }
     }
 
-    // Remove processed entries
-    RemoveMatchedLines(filename1, mailsToKeep);
+    int randEmail;
+    for (int i=0; i<requiredGroups; i++){
+        if (remainingEmails.empty()) break; 
+        randEmail = (rand() % remainingEmails.size());
+        tempGroup.clear();
+        tempGroup.push_back(remainingEmails[randEmail]);
+        grouped.insert(remainingEmails[randEmail]); 
+        remainingEmails.erase(remainingEmails.begin()+randEmail);
+        groups.push_back(tempGroup);
+    }
+
+    for (auto &group:groups){
+        if (group.size() >= groupSize){
+            continue;
+        }
+        while (group.size() < groupSize && !remainingEmails.empty()){
+            randEmail = (rand() % remainingEmails.size());
+            group.push_back(remainingEmails[randEmail]);
+            grouped.insert(remainingEmails[randEmail]); 
+            remainingEmails.erase(remainingEmails.begin()+randEmail);
+        }
+    }
+
+    // Output groups to the file
+    file.open(filename2, ios::out);
+    for(auto &group:groups){
+        for (int i=0; i<group.size(); i++){
+            file << group[i]<<",";
+        }
+        file << endl;
+    }
 }
