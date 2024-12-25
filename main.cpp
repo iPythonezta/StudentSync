@@ -1833,7 +1833,7 @@ void FormGroups(const string filename1, const string filename2, int groupSize, v
                 if (group.size() >= groupSize){
                     break;
                 }
-                if (grouped.count(preference)){
+                if (grouped.count(preference)>=1){
                     continue;
                 }
                 if (emailCount.count(preference) == 0){
@@ -1898,7 +1898,7 @@ void FormGroups(const string filename1, const string filename2, int groupSize, v
                 if (group.size() >= groupSize){
                     break;
                 }
-                if (grouped.count(preference)){
+                if (grouped.count(preference)>=1){
                     continue;
                 }
                 mutual = checkMutualPreference(group[i], preference, preferences);
@@ -1927,7 +1927,7 @@ void FormGroups(const string filename1, const string filename2, int groupSize, v
                 if (group.size() >= groupSize){
                     break;
                 }
-                if (grouped.count(preference)){
+                if (grouped.count(preference)>=1){
                     continue;
                 }
                 if (emailCount.count(preference) == 0){
