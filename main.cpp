@@ -1036,67 +1036,68 @@ int main(void) {
         return crow::response(200, response);
             });
 
-    CROW_ROUTE(studentSync, "/api/quiz/") // API endpoint to create a new quiz. Accessible via POST method.
-        .methods("POST"_method)
-        ([db](const crow::request& request) {
+    CROW_ROUTE(studentSync, "/api/quizzes/<int>/") // API endpoint to manage quiz questions for a specific quiz. Accessible via GET and POST methods.
+    .methods("GET"_method, "POST"_method)
+    ([db](const crow::request& request, int quizId) {
         string adminUsername;
         bool adminIsAdmin;
-
-        // Validate the Authorization Token.
-        string auth_header = string(request.get_header_value("Authorization")).replace(0, 7, ""); // Remove "Bearer ".
-        if (auth_header.empty() || !validate_token(auth_header, secretToken)) {
-            return crow::response(401, "Authorization token is missing or invalid"); // Reject unauthorized requests.
+        string auth_header = string(request.get_header_value("Authorization")).replace(0, 7, ""); // Extract token by removing "Bearer ".
+        if (auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, adminUsername, adminIsAdmin)) {
+            return crow::response(401, "You must be logged in to access this resource"); // Reject unauthorized requests.
         }
 
-        // Decode the token to retrieve the admin's username and admin status.
-        if (!decodeToken(auth_header, adminUsername, adminIsAdmin)) {
-            return crow::response(401, "Failed to decode token"); // Reject if token decoding fails.
-        }
-
-        // Ensure the user is an admin.
-        if (!adminIsAdmin) {
-            return crow::response(401, "You are not authorized to perform this action"); // Reject if the user is not an admin.
-        }
-
-        // Parse the JSON request body to retrieve the quiz details.
-        auto json_data = crow::json::load(request.body);
-        if (!json_data) {
-            return crow::response(400, "Invalid JSON"); // Reject if JSON is invalid or missing.
-        }
-
-        string quizName;
-        int subjectId;
-        int quizMarks;
-
-        try {
-            quizName = json_data["quizName"].s(); // Extract the quiz name.
-            subjectId = json_data["subjectId"].i(); // Extract the subject ID to which the quiz belongs.
-            quizMarks = json_data["quizMarks"].i(); // Extract the total marks for the quiz.
-        }
-        catch (const exception& e) {
-            return crow::response(400, "Invalid JSON structure"); // Reject if JSON structure is incorrect.
-        }
-
-        // SQL query to insert the new quiz into the database.
-        string sql = "INSERT INTO quizes (subject_id, quiz_name, quiz_marks) VALUES (" +
-            to_string(subjectId) + ", '" + quizName + "', " + to_string(quizMarks) + ");";
-
-        // Execute the SQL query and handle the response.
-        try {
-            int result = executeSQL(db, sql.c_str());
-            if (result == 0) {
-                crow::json::wvalue response; // Prepare success response with quiz details.
-                response["quizName"] = quizName;
-                response["subjectId"] = subjectId;
-                response["quizMarks"] = quizMarks;
-                return crow::response(200, response); // Return success response.
+        // Handle POST requests to add a question to the quiz.
+        if (request.method == "POST"_method) {
+            if (!adminIsAdmin) {
+                return crow::response(401, "You are not authorized to perform this action"); // Reject if the user is not an admin.
             }
-            else {
-                return crow::response(400, "Error creating quiz"); // Respond with error if quiz creation fails.
+
+            auto json_data = crow::json::load(request.body); // Parse JSON data from the request body.
+            if (!json_data) {
+                return crow::response(400, "Invalid JSON"); // Reject if JSON is invalid or missing.
+            }
+
+            string question, answer;
+            try {
+                question = json_data["question"].s(); // Extract the question text from JSON.
+                answer = json_data["answer"].s(); // Extract the answer text from JSON.
+            }
+            catch (const exception& e) {
+                return crow::response(400, "Invalid JSON"); // Reject if JSON parsing fails.
+            }
+
+            // SQL query to add the question and answer to the quiz.
+            string sqlStmt = "INSERT INTO quiz_questions (quiz_id, question, answer) VALUES (" + to_string(quizId) + ", '" + question + "', '" + answer + "');";
+            try {
+                int result = executeSQL(db, sqlStmt.c_str()); // Execute the SQL query.
+                if (result == 0) {
+                    crow::json::wvalue response; // Prepare success response with question details.
+                    response["quiz_id"] = quizId;
+                    response["question"] = question;
+                    response["answer"] = answer;
+                    return crow::response(200, response); // Return success response.
+                }
+                else {
+                    return crow::response(400, "Error adding question"); // Respond with error if question addition fails.
+                }
+            }
+            catch (const exception& e) {
+                return crow::response(400, "Error adding question"); // Respond with error if question addition fails.
             }
         }
-        catch (const exception& e) {
-            return crow::response(500, "Database error: Could not create quiz"); // Respond with error if database operation fails.
+
+        // Handle GET requests to retrieve all questions for the quiz.
+        else if (request.method == "GET"_method) {
+            vector<vector<string>> questions = getQuestionsForQuiz(db, quizId); // Fetch all questions for the specified quiz.
+            crow::json::wvalue response = crow::json::wvalue::object(); // Prepare JSON response.
+
+            for (int i = 0; i < questions.size(); i++) {
+                response[i]["id"] = questions[i][0]; // Question ID.
+                response[i]["question"] = questions[i][1]; // Question text.
+                response[i]["answer"] = questions[i][2]; // Answer text.
+            }
+
+            return crow::response(200, response); // Return response with all quiz questions.
         }
             });
 
