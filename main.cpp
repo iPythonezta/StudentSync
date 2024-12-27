@@ -1036,71 +1036,64 @@ int main(void) {
         return crow::response(200, response);
             });
 
-    CROW_ROUTE(studentSync, "/api/quizzes/<int>/") // API endpoint to manage quiz questions for a specific quiz. Accessible via GET and POST methods.
-    .methods("GET"_method, "POST"_method)
-    ([db](const crow::request& request, int quizId) {
-        string adminUsername;
-        bool adminIsAdmin;
-        string auth_header = string(request.get_header_value("Authorization")).replace(0, 7, ""); // Extract token by removing "Bearer ".
-        if (auth_header.empty() || !validate_token(auth_header, secretToken) || !decodeToken(auth_header, adminUsername, adminIsAdmin)) {
-            return crow::response(401, "You must be logged in to access this resource"); // Reject unauthorized requests.
+    CROW_ROUTE(studentSync, "/api/quiz/")
+    .methods("GET"_method, "POST"_method, "DELETE"_method)
+    ([db](const crow::request& req) {
+
+    // Map to store questions grouped by subject
+    unordered_map<string, vector<Question>> subjectMap;
+    // List of subjects
+    vector<string> subjects;
+    string subject;
+    // SQL query to get subject names from the database
+    string sql = "SELECT name FROM subject";
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    // Populate subject list and initialize question maps from CSV files
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        subject = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        subjects.push_back(subject);
+        subjectMap[subject] = readCSV("quizes/" + subject + ".csv"); // Load quiz questions from CSV
+    }
+    sqlite3_finalize(stmt);
+
+    // Parse JSON body from the request
+    auto x = crow::json::load(req.body);
+
+    // Handle GET request: Return quiz data for all subjects
+    if (req.method == "GET"_method) {
+        crow::json::wvalue result;
+        // For each subject, convert its questions into a displayable format
+        for (const auto& subject : subjects) {
+            result[subject] = displayData(subjectMap[subject]);
         }
+        return crow::response{ result }; // Respond with the quiz data
+    }
 
-        // Handle POST requests to add a question to the quiz.
-        if (request.method == "POST"_method) {
-            if (!adminIsAdmin) {
-                return crow::response(401, "You are not authorized to perform this action"); // Reject if the user is not an admin.
-            }
+    // Handle POST request: Add a new question to a subject's quiz
+    if (req.method == "POST"_method && x.has("subject") && x.has("question") && x.has("answer")) {
+        string subject = x["subject"].s(); // Subject name
+        int id = subjectMap[subject].size() + 1; // New question ID
+        string question = x["question"].s(); // Question text
+        string answer = x["answer"].s(); // Answer text
+        // Add the question and update the CSV
+        addQuestion(subjectMap, subject, id, question, answer);
+        return crow::response{ "Question added successfully" };
+    }
 
-            auto json_data = crow::json::load(request.body); // Parse JSON data from the request body.
-            if (!json_data) {
-                return crow::response(400, "Invalid JSON"); // Reject if JSON is invalid or missing.
-            }
+    // Handle DELETE request: Delete a question from a subject's quiz
+    if (req.method == "DELETE"_method && x.has("subject") && x.has("id")) {
+        string subject = x["subject"].s(); // Subject name
+        int delete_index = x["id"].i() - 1; // ID of the question to delete (convert to zero-based index)
+        // Remove the question and update the CSV
+        deleteRow(subjectMap[subject], delete_index);
+        writeCSV("quizes/" + subject + ".csv", subjectMap[subject]);
+        return crow::response{ "Question deleted successfully" };
+    }
 
-            string question, answer;
-            try {
-                question = json_data["question"].s(); // Extract the question text from JSON.
-                answer = json_data["answer"].s(); // Extract the answer text from JSON.
-            }
-            catch (const exception& e) {
-                return crow::response(400, "Invalid JSON"); // Reject if JSON parsing fails.
-            }
-
-            // SQL query to add the question and answer to the quiz.
-            string sqlStmt = "INSERT INTO quiz_questions (quiz_id, question, answer) VALUES (" + to_string(quizId) + ", '" + question + "', '" + answer + "');";
-            try {
-                int result = executeSQL(db, sqlStmt.c_str()); // Execute the SQL query.
-                if (result == 0) {
-                    crow::json::wvalue response; // Prepare success response with question details.
-                    response["quiz_id"] = quizId;
-                    response["question"] = question;
-                    response["answer"] = answer;
-                    return crow::response(200, response); // Return success response.
-                }
-                else {
-                    return crow::response(400, "Error adding question"); // Respond with error if question addition fails.
-                }
-            }
-            catch (const exception& e) {
-                return crow::response(400, "Error adding question"); // Respond with error if question addition fails.
-            }
-        }
-
-        // Handle GET requests to retrieve all questions for the quiz.
-        else if (request.method == "GET"_method) {
-            vector<vector<string>> questions = getQuestionsForQuiz(db, quizId); // Fetch all questions for the specified quiz.
-            crow::json::wvalue response = crow::json::wvalue::object(); // Prepare JSON response.
-
-            for (int i = 0; i < questions.size(); i++) {
-                response[i]["id"] = questions[i][0]; // Question ID.
-                response[i]["question"] = questions[i][1]; // Question text.
-                response[i]["answer"] = questions[i][2]; // Answer text.
-            }
-
-            return crow::response(200, response); // Return response with all quiz questions.
-        }
-            });
-
+    // Respond with 400 for unsupported methods or invalid requests
+    return crow::response{ 400 }; 
+});
     CROW_ROUTE(studentSync, "/api/grouping-sessions/") // API endpoint to manage grouping sessions. Accessible via GET and POST methods.
         .methods("GET"_method, "POST"_method)
         ([](const crow::request& req) {
