@@ -13,9 +13,9 @@
 ---
 
 ## Project Description
-The program is designed to support student synchronization and academic management workflows for institutions. This program implements a student management system with a web API using the Crow framework, SQLite database, and JWT authentication.
+This project is a web application created using the *Crow Framework* at the backend. The Project is designed to support student synchronization and academic management workflows for institutions. This program implements a student management system with a web API using the Crow framework, SQLite database, and JWT authentication.
 
-### Key Functionalities:
+### Key Backend Functionalities:
 - **User Authentication**: Create accounts, login, password management, and role-based authorization with admin-user distinction.
 - **Event and Task Management**: Create, retrieve, and delete scheduled events and tasks.
 - **Subject Management**: Manage subject marks and calculate aggregates using set weightages for quizzes, assignments, and exams.
