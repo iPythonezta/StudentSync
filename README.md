@@ -40,10 +40,7 @@ The program is designed to support student synchronization and academic manageme
 ### Download Git
 1. Go to the official Git website: [https://git-scm.com/](https://git-scm.com/).
 2. Download and install the correct version for your operating system accordint to the instructions there.
-
-   ```
-
-5. Complete the installation and verify by running the following command:
+3. Complete the installation and verify by running the following command:
 
    ```bash
    git --version
