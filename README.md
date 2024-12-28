@@ -99,7 +99,8 @@ If you encounter issues, install each library individually:
 
 ## Running the Program
 1. Build and run the project in Visual Studio.
-2. A link to the locally hosted web app will be displayed (e.g., `http://0.0.0.0:PORT`).
+2. A link to the locally hosted web app will be displayed (e.g., `http://0.0.0.0:exposed port`).
 3. Press `Ctrl+Click` on the link to open it in your browser.
 4. Replace `0.0.0.0` in the URL with `localhost` and press Enter.
 5. Optionally, port-forward to a static domain using a free hosting service for wider access.
+   
