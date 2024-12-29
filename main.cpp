@@ -696,7 +696,10 @@ int main(void) {
             vector<vector<string>> mids = getAllMids(db, id);
             vector<vector<string>> finals = getAllFinals(db, id);
 
-            
+            // The following code organizes quizzes, assignments, mids, and finals into a JSON structure (subject).
+            // Each section loops through its respective data vector (quizes, assignments, mids, finals) and populates 
+            // the corresponding JSON object with ID, name, total marks, and marks obtained by the student.
+
             for (int i = 0; i < quizes.size(); i++) {
                 subject["quizes"][i] = crow::json::wvalue::object();
                 subject["quizes"][i]["quiz_id"] = quizes[i][0];
