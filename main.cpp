@@ -668,21 +668,66 @@ int main(void) {
             sqlite3_prepare_v2(db, sqlQuery.c_str(), -1, &stmt, nullptr);
             sqlite3_step(stmt);
 
+            string _id, name, credits, quiz_weightage, assignment_weightage, mids_weightage, finals_weightage;
             // Populate the subject details from the database.
-            subject["id"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
-            subject["name"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)));
-            subject["credits"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2)));
-            subject["quiz_weightage"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3)));
-            subject["assignment_weightage"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4)));
-            subject["mids_weightage"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5)));
-            subject["finals_weightage"] = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6)));
-            sqlite3_finalize(stmt);
+            _id = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+            name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)));
+            credits = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2)));
+            quiz_weightage = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3)));
+            assignment_weightage = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4)));
+            mids_weightage = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5)));
+            finals_weightage = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6)));
 
             // Add associated tasks (quizzes, assignments, mids, finals) to the response.
-            subject["quizes"] = getAllQuizes(db, id);
-            subject["assignments"] = getAllAssignments(db, id);
-            subject["mids"] = getAllMids(db, id);
-            subject["finals"] = getAllFinals(db, id);
+            subject["id"] = _id;
+            subject["name"] = name;
+            subject["credits"] = credits;
+            subject["quiz_weightage"] = quiz_weightage;
+            subject["assignment_weightage"] = assignment_weightage;
+            subject["mids_weightage"] = mids_weightage;
+            subject["finals_weightage"] = finals_weightage;
+
+            sqlite3_finalize(stmt);
+
+            // ----------------------------------------------------- //
+
+            vector<vector<string>> quizes = getAllQuizes(db, id);
+            vector<vector<string>> assignments = getAllAssignments(db, id);
+            vector<vector<string>> mids = getAllMids(db, id);
+            vector<vector<string>> finals = getAllFinals(db, id);
+
+            
+            for (int i = 0; i < quizes.size(); i++) {
+                subject["quizes"][i] = crow::json::wvalue::object();
+                subject["quizes"][i]["quiz_id"] = quizes[i][0];
+                subject["quizes"][i]["quiz_name"] = quizes[i][1];
+                subject["quizes"][i]["quiz_marks"] = quizes[i][2];
+                subject["quizes"][i]["quiz_marks_obtained"] = studentMarksFromFile(adminUsername, "quiz", id, name, stoi(quizes[i][0]));
+            }
+
+            for (int i = 0; i < assignments.size(); i++) {
+                subject["assignments"][i] = crow::json::wvalue::object();
+                subject["assignments"][i]["assignment_id"] = assignments[i][0];
+                subject["assignments"][i]["assignment_name"] = assignments[i][1];
+                subject["assignments"][i]["assignment_marks"] = assignments[i][2];
+                subject["assignments"][i]["assignment_marks_obtained"] = studentMarksFromFile(adminUsername, "assignment", id, name, stoi(assignments[i][0]));
+            }
+
+            for (int i = 0; i < mids.size(); i++) {
+                subject["mids"][i] = crow::json::wvalue::object();
+                subject["mids"][i]["mid_id"] = mids[i][0];
+                subject["mids"][i]["mid_name"] = mids[i][1];
+                subject["mids"][i]["mid_marks"] = mids[i][2];
+                subject["mids"][i]["mid_marks_obtained"] = studentMarksFromFile(adminUsername, "mid", id, name, stoi(mids[i][0]));
+            }
+
+            for (int i = 0; i < finals.size(); i++) {
+                subject["finals"][i] = crow::json::wvalue::object();
+                subject["finals"][i]["final_id"] = finals[i][0];
+                subject["finals"][i]["final_name"] = finals[i][1];
+                subject["finals"][i]["final_marks"] = finals[i][2];
+                subject["finals"][i]["final_marks_obtained"] = studentMarksFromFile(adminUsername, "final", id, name, stoi(finals[i][0]));
+            }
 
             return crow::response(200, subject); // Return subject details with associated tasks.
         }
